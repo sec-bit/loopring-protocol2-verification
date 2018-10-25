@@ -23,21 +23,21 @@ Class LTS : Type :=
   }.
 
 (** * States *)
+
+Record WorldState :=
+  mk_wstate {
+      tokens
+      }.
+
+
+
+
 (** *)
 Parameter LPSCState : Type.
 Parameter initLPSCState : LPSCState.
 
 
 
-(** Basic data types *)
-Parameter address : Type.
-Parameter uint : Type.
-Parameter uint16 : Type.
-Parameter uint64 : Type.
-Parameter int16 : Type.
-Parameter byte : Type.
-Parameter bytes32 : Type.
-Definition bytes : Type := list byte.
 
 (** * Inputs *)
 Module Contxt.
@@ -64,7 +64,7 @@ Module Contxt.
       transferData          : uint;
       transferPtr           : uint;
     }.
-  
+
 End Contxt.
 
 
@@ -93,7 +93,7 @@ Module Spendable.
 End Spendable.
 
 Module Order.
-  Record t : Type := 
+  Record t : Type :=
     {
       owner                 : address;
       tokenS                : address;
@@ -134,19 +134,19 @@ Module Order.
        *)
     }.
 
-  
+
   Section OrderProperties.
-    
+
     Variable s : LPSCState.
-    
+
     Parameter P2P : t -> bool.
     Parameter hash : t -> bytes32.
     Parameter brokerInterceptor : t -> address.
     Parameter filledAmountS : t -> uint.
     Parameter valid : t -> bool.
-    
+
   End OrderProperties.
-  
+
 End Order.
 
 (** Rings *)

@@ -14,3 +14,4 @@ Makefile.coq: _CoqProject
 clean: Makefile.coq
 	make -f $< clean
 	rm -f $< $<.conf
+	rm -f .*.aux
