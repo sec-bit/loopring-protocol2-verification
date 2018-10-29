@@ -1,12 +1,15 @@
 -R . LPSCModel
 
-Actions.v
-RingSubmitterModel.v
-State.v
 TopModel.v
-Types.v
 
-BNat.v
-LibEx.v
-Mapping.v
-TMap.v
+ERC20.v
+RingCanceller.v
+RingSubmitter.v
+TradeDelegate.v
+
+Events.v
+LibModel.v
+Maps.v
+Messages.v
+States.v
+Types.v

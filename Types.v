@@ -1,3 +1,6 @@
+Require Import
+        Nat ZArith.
+
 (** Basic types used in the model *)
 
 Definition address : Type := nat.
@@ -12,11 +15,6 @@ Definition bytes32 : Type := nat.
 Definition bytes : Type := list byte.
 Definition value : Type := nat.
 
-(*
-   Over/underflow is modeled in map update functions.
-*)
-Parameter MAX_UINT256 : uint256.
-
 (** Key pair *)
 
 Parameter Key: Type. (* to be defined *)
@@ -25,6 +23,16 @@ Record KeyPair : Type :=
   mk_key_pair {
       pubkey: Key;
       privKey: Key;
+    }.
+
+
+(** Mining Parameters *)
+Record Mining: Type :=
+  mk_mining {
+      mining_feeRecipient: address;
+      mining_miner: address;
+      mining_sig: bytes;
+      (* computed fields are not modeled here *)
     }.
 
 

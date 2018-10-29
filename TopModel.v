@@ -1,35 +1,55 @@
-Require Import Nat List.
-Require Import Actions State Types.
-Require Import RingSubmitterModel.
+Require Import
+        List.
 
-(* to be defined *)
-Parameter Token_actor: TokenAction -> WorldState -> (WorldState * WorldEvents).
-Parameter OrderOwner_actor: OrderOwnerAction -> WorldState -> (WorldState * WorldEvents).
-Parameter Wallet_actor: WalletAction -> WorldState -> (WorldState * WorldEvents).
-Parameter Miner_actor: MinerAction -> WorldState -> (WorldState * WorldEvents).
+Require Import
+        Events
+        Messages
+        States
+        Types.
+Require Import
+        ERC20
+        RingSubmitter
+        RingCanceller
+        TradeDelegate.
 
-Definition lr_world_step (act: Action) (st: WorldState) : (WorldState * WorldEvents) :=
-  match act with
-  | Action_LPSC a => LPSC_actor a st
-  | Action_Token a => Token_actor a st
-  | Action_OrderOwner a => OrderOwner_actor a st
-  | Action_Wallet a => Wallet_actor a st
-  | Action_Miner a => Miner_actor a st
+
+(* TODO: to be defined *)
+Parameter wst_init: WorldState.
+
+Definition lr_step
+           (wst0 wst: WorldState) (msg: Message)
+  : (WorldState * list Event) :=
+  match msg with
+  | MsgRingSubmitter msg' =>
+    RingSubmitter_step wst0 wst msg'
+  | MsgRingCanceller msg' =>
+    RingCanceller_step wst0 wst msg'
+  | MsgTradeDelegate msg' =>
+    TradeDelegate_step wst0 wst msg'
+  | MsgERC20 msg' =>
+    ERC20_step wst0 wst msg'
   end.
 
-Fixpoint lr_world_steps (acts: list Action) (st: WorldState) : (WorldState * WorldEvents) :=
-  match acts with
-  | nil => (st, nil)
-  | a :: acts' => match lr_world_step a st with
-                 | (st', evts') => match lr_world_steps acts' st' with
-                                  | (st'', evts'') => (st'', evts' ++ evts'')
-                                  end
-                 end
+Fixpoint lr_steps (wst0 wst: WorldState) (msgs: list Message)
+  : (WorldState * list Event) :=
+  match msgs with
+  | nil => (wst, nil)
+  | msg :: msgs' =>
+    match lr_step wst0 wst msg with
+    | (wst', evts') =>
+      if IsRevert evts' then
+        (wst0, EvtRevert :: nil)
+      else
+        match lr_steps wst0 wst' msgs' with
+        | (wst'', evts'') =>
+          if IsRevert evts'' then
+            (wst0, EvtRevert :: nil)
+          else
+            (wst'', evts' ++ evts'')
+        end
+    end
   end.
 
-(* to be defined *)
-Parameter InitGlobalState: WorldState.
 
-(* Top-level model of loopring protocol *)
-Definition lr_model :=
-  fun acts: list Action => lr_world_steps acts InitGlobalState.
+Definition lr_model (msgs: list Message) : (WorldState * list Event) :=
+  lr_steps wst_init wst_init msgs.
