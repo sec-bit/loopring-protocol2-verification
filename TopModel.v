@@ -8,6 +8,7 @@ Require Import
         Types.
 Require Import
         ERC20
+        FeeHolder
         RingSubmitter
         RingCanceller
         TradeDelegate.
@@ -26,6 +27,8 @@ Definition lr_step
     RingCanceller_step wst0 wst msg'
   | MsgTradeDelegate msg' =>
     TradeDelegate_step wst0 wst msg'
+  | MsgFeeHolder msg' =>
+    FeeHolder_step wst0 wst msg'
   | MsgERC20 msg' =>
     ERC20_step wst0 wst msg'
   end.

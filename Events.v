@@ -13,6 +13,8 @@ Inductive Event : Type :=
 (* TradeDelegate events*)
 | EvtAddressAuthorized (addr: address)
 | EvtAddressDeauthorized (addr: address)
+(* FeeHolder events *)
+| EvtTokenWithdrawn (owner token: address) (value: uint)
 (* to be defined *)
 .
 

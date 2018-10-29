@@ -76,6 +76,14 @@ Record TradeDelegateState : Type :=
     }.
 
 
+(** State of FeeHolder contract *)
+Record FeeHolderState : Type :=
+  mk_fee_holder_state {
+      feeholder_delegateAddress: address;
+      feeholder_feeBalances: AA2V.t;
+    }.
+
+
 (** World state modeling all parties of Loopring protocol *)
 Record WorldState : Type :=
   mk_world_state {
@@ -91,6 +99,9 @@ Record WorldState : Type :=
       (* LPSC trade delegate contract *)
       wst_trade_delegate_state: TradeDelegateState;
       wst_trade_delegate_addr: address;
+      (* LPSC fee holder contract *)
+      wst_feeholder_state: FeeHolderState;
+      wst_feeholder_addr: address;
 
       (* TODO: add states of other LPSC contracts and ... *)
     }.
@@ -106,7 +117,25 @@ Definition wst_update_trade_delegate
     wst_ring_canceller_addr := wst_ring_canceller_addr wst;
     wst_trade_delegate_state := st;
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
   |}.
+
+Definition wst_update_feeholder
+           (wst: WorldState) (st: FeeHolderState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := wst_ring_submitter_state wst;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := st;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+  |}.
+
 
 Definition wst_update_erc20s
            (wst: WorldState) (st: ERC20StateMap.t)
@@ -119,4 +148,6 @@ Definition wst_update_erc20s
     wst_ring_canceller_addr := wst_ring_canceller_addr wst;
     wst_trade_delegate_state := wst_trade_delegate_state wst;
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
   |}.

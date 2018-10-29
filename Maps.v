@@ -154,3 +154,11 @@ Module AH2B := Mapping AH_as_DT BoolElem.
 Module AH2V := Mapping AH_as_DT ValElem.
 (* address -> address -> bytes20 -> Nat *)
 Module AAH2V := Mapping AAH_as_DT ValElem.
+
+
+(** Shortcuts for map updates  *)
+Definition AA2V_upd_inc (m: AA2V.t) (a0 a1: address) (v: value) : AA2V.t :=
+  AA2V.upd m (a0, a1) (plus_with_overflow (AA2V.get m (a0, a1)) v).
+
+Definition AA2V_upd_dec (m: AA2V.t) (a0 a1: address) (v: value) : AA2V.t :=
+  AA2V.upd m (a0, a1) (minus_with_underflow (AA2V.get m (a0, a1)) v).

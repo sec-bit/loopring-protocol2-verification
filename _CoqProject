@@ -3,6 +3,7 @@
 TopModel.v
 
 ERC20.v
+FeeHolder.v
 RingCanceller.v
 RingSubmitter.v
 TradeDelegate.v

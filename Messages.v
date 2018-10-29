@@ -71,6 +71,24 @@ Section TradeDelegate.
 End TradeDelegate.
 
 
+Section FeeHolder.
+
+  Record FeeBalanceParam : Type :=
+    mk_fee_balance_param {
+        feeblncs_token: address;
+        feeblncs_owner: address;
+        feeblncs_value: uint;
+      }.
+
+  Inductive FeeHolderMsg : Type :=
+  | msg_withdrawBurned (sender token: address) (value: uint)
+  | msg_withdrawToken (sender token: address) (value: uint)
+  | msg_batchAddFeeBalances (sender: address) (params: list FeeBalanceParam)
+  .
+
+End FeeHolder.
+
+
 Section ERC20.
 
   Inductive ERC20Msg : Type :=
@@ -89,6 +107,7 @@ Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
 | MsgRingCanceller (msg: RingCancellerMsg)
 | MsgTradeDelegate (msg: TradeDelegateMsg)
+| MsgFeeHolder (msg: FeeHolderMsg)
 | MsgERC20 (msg: ERC20Msg)
 (* TODO: add messages of other LPSC contracts *)
 .

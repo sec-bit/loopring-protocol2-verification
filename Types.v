@@ -15,6 +15,21 @@ Definition bytes32 : Type := nat.
 Definition bytes : Type := list byte.
 Definition value : Type := nat.
 
+
+(** Model integer overflow/underflow *)
+Parameter MAX_UINT256 : uint256.
+
+Definition plus_with_overflow (lhs: value) (rhs: value) :=
+  if (Nat.ltb (MAX_UINT256 - rhs) lhs)
+  then (if (Nat.eqb rhs 0)
+        then lhs
+         else (lhs + rhs - MAX_UINT256 - 1))
+  else (lhs + rhs).
+
+Definition minus_with_underflow (lhs: value) (rhs: value) :=
+  if (Nat.ltb lhs rhs) then (lhs + MAX_UINT256 + 1 - rhs) else (lhs - rhs).
+
+
 (** Key pair *)
 
 Parameter Key: Type. (* to be defined *)
