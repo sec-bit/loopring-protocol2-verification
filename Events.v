@@ -8,24 +8,59 @@ Unset Strict Implicit.
 
 
 Inductive Event : Type :=
-(* Abstract event that can represent any events other than following ones *)
-| EvtAny {T: Type} (data: T)
 (* Not model `Errors` for simplification *)
 | EvtRevert
-(* Pseudo event that models the return value *)
-| EvtReturn {T: Type} (data: T)
 (* TradeDelegate events*)
 | EvtAddressAuthorized (addr: address)
 | EvtAddressDeauthorized (addr: address)
 (* to be defined *)
 .
 
-Fixpoint IsRevert (evts: list Event) : bool :=
+
+Inductive RetVal : Type :=
+| Return {T: Type} (val: T)
+.
+
+
+Record Result: Type :=
+  mk_result {
+      res_events: list Event; (* events issued in the execution *)
+      res_return: option RetVal;   (* return value if any *)
+    }.
+
+
+Fixpoint has_revert_event (evts: list Event) : bool :=
   match evts with
   | nil => false
   | evt :: evts' =>
     match evt with
     | EvtRevert => true
-    | _ => IsRevert evts'
+    | _ => has_revert_event evts'
     end
   end.
+
+Definition is_revert (res: Result) : bool :=
+  match res with
+  | mk_result evts _ => has_revert_event evts
+  end.
+
+
+Definition concat_results (res res': Result) : Result :=
+  match res with
+  | mk_result evts _ =>
+    match res' with
+    | mk_result evts' ret' => mk_result (evts ++ evts') ret'
+    end
+  end.
+
+Definition make_revert_result : Result :=
+  {|
+    res_events := EvtRevert :: nil;
+    res_return := None;
+  |}.
+
+Definition make_empty_result : Result :=
+  {|
+    res_events := nil;
+    res_return := None;
+  |}.

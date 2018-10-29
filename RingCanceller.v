@@ -6,6 +6,6 @@ Require Import
 
 Definition RingCanceller_step
            (wst0 wst: WorldState) (msg: RingCancellerMsg)
-  : (WorldState * list Event) :=
+  : (WorldState * Result) :=
   (* TODO: to be defined *)
-  (wst0, nil).
+  (wst0, make_empty_result).

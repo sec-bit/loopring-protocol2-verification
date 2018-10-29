@@ -16,13 +16,13 @@ Definition func_submitRings
            (wst0 wst: WorldState)
            (sender: address)
            (orders: list Order) (rings: list Ring) (mining: Mining)
-  : (WorldState * list Event) :=
+  : (WorldState * Result) :=
   (* to be defined *)
-  (wst, nil).
+  (wst, make_empty_result).
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
-  : (WorldState * list Event) :=
+  : (WorldState * Result) :=
   match msg with
   | msg_submitRings sender orders rings mining =>
     func_submitRings wst0 wst sender orders rings mining

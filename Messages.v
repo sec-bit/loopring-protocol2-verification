@@ -49,8 +49,8 @@ Section TradeDelegate.
       }.
 
   Inductive TradeDelegateMsg : Type :=
-  | msg_authorizedAddress (sender addr: address)
-  | msg_deauthorizedAddress (sender addr: address)
+  | msg_authorizeAddress (sender addr: address)
+  | msg_deauthorizeAddress (sender addr: address)
   | msg_isAddressAuthorized (sender add: address)
 
   | msg_batchTransfer (sender: address) (params: list TransferParam)

@@ -18,7 +18,7 @@ Parameter wst_init: WorldState.
 
 Definition lr_step
            (wst0 wst: WorldState) (msg: Message)
-  : (WorldState * list Event) :=
+  : (WorldState * Result) :=
   match msg with
   | MsgRingSubmitter msg' =>
     RingSubmitter_step wst0 wst msg'
@@ -31,25 +31,25 @@ Definition lr_step
   end.
 
 Fixpoint lr_steps (wst0 wst: WorldState) (msgs: list Message)
-  : (WorldState * list Event) :=
+  : (WorldState * Result) :=
   match msgs with
-  | nil => (wst, nil)
+  | nil => (wst, make_empty_result)
   | msg :: msgs' =>
     match lr_step wst0 wst msg with
-    | (wst', evts') =>
-      if IsRevert evts' then
-        (wst0, EvtRevert :: nil)
+    | (wst', res') =>
+      if is_revert res' then
+        (wst0, make_revert_result)
       else
         match lr_steps wst0 wst' msgs' with
-        | (wst'', evts'') =>
-          if IsRevert evts'' then
-            (wst0, EvtRevert :: nil)
+        | (wst'', res'') =>
+          if is_revert res'' then
+            (wst0, make_revert_result)
           else
-            (wst'', evts' ++ evts'')
+            (wst'', concat_results res' res'')
         end
     end
   end.
 
 
-Definition lr_model (msgs: list Message) : (WorldState * list Event) :=
+Definition lr_model (msgs: list Message) : (WorldState * Result) :=
   lr_steps wst_init wst_init msgs.
