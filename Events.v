@@ -15,6 +15,13 @@ Inductive Event : Type :=
 | EvtAddressDeauthorized (addr: address)
 (* FeeHolder events *)
 | EvtTokenWithdrawn (owner token: address) (value: uint)
+(* RingCanceller events *)
+| EvtOrderCancelled (broker: address) (hashes: list bytes20)
+| EvtAllOrdersCancelledForTradingPair (broker token1 token2: address) (cutoff: uint)
+| EvtAllOrdersCancelled (broker: address) (cutoff: uint)
+| EvtOrdersCancelledByBroker (broker owner: address) (hashes: list bytes20)
+| EvtAllOrdersCancelledForTradingPairByBroker (broker owner token1 token2: address) (cutoff: uint)
+| EvtAllOrdersCancelledByBroker (broker owner: address) (cutoff: uint)
 (* to be defined *)
 .
 

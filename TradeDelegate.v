@@ -191,7 +191,7 @@ End Func_setCutoffs.
 Section Func_setTradingPairCutoffs.
 
   Definition func_setTradingPairCutoffs
-             (wst0 wst: WorldState) (sender broker: address) (cutoff: uint)
+             (wst0 wst: WorldState) (sender broker: address) (tokenPair: bytes20) (cutoff: uint)
   : (WorldState * Result) :=
     (* TODO: to be defined *)
     (wst0, make_empty_result).
@@ -312,8 +312,8 @@ Definition TradeDelegate_step
     func_setCancelled wst0 wst sender broker orderHash
   | msg_setCutoffs sender broker cutoff =>
     func_setCutoffs wst0 wst sender broker cutoff
-  | msg_setTradingPairCutoffs sender broker cutoff =>
-    func_setTradingPairCutoffs wst0 wst sender broker cutoff
+  | msg_setTradingPairCutoffs sender broker tokenPair cutoff =>
+    func_setTradingPairCutoffs wst0 wst sender broker tokenPair cutoff
   | msg_setCutoffsOfOwner sender broker owner cutoff =>
     func_setCutoffsOfOwner wst0 wst sender broker owner cutoff
   | msg_setTradingPairCutoffsOfOwner sender broker owner tokenPair cutoff =>

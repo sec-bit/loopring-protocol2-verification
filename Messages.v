@@ -15,7 +15,8 @@ Section RingCanceller.
 
   Inductive RingCancellerMsg : Type :=
   | msg_cancelOrders (sender: address) (order_hashes: list bytes20)
-  | msg_cancelAllORdersForTradingPair (sender token1 token2: address) (cutoff: uint)
+  | msg_cancelAllOrdersForTradingPair (sender token1 token2: address) (cutoff: uint)
+  | msg_cancelAllOrders (sender: address) (cutoff: uint)
   | msg_cancelAllOrdersForTradingPairOfOwner (sender owner token1 token2: address) (cutoff: uint)
   | msg_cancelAllOrdersOfOwner (sender owner: address) (cutoff: uint)
   .
@@ -58,7 +59,7 @@ Section TradeDelegate.
 
   | msg_setCancelled (sender broker: address) (orderHash: bytes32)
   | msg_setCutoffs (sender broker: address) (cutoff: uint)
-  | msg_setTradingPairCutoffs (sender broker: address) (cutoff: uint)
+  | msg_setTradingPairCutoffs (sender broker: address) (tokenPair: bytes20) (cutoff: uint)
   | msg_setCutoffsOfOwner (sender broker owner: address) (cutoff: uint)
   | msg_setTradingPairCutoffsOfOwner (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint)
   | msg_batchGetFilledAndCheckCancelled (sender: address) (params: list OrderParam)

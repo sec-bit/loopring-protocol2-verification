@@ -84,6 +84,13 @@ Record FeeHolderState : Type :=
     }.
 
 
+(** State of the block *)
+Record BlockState : Type :=
+  mk_block_state {
+      block_timestamp: uint;
+    }.
+
+
 (** World state modeling all parties of Loopring protocol *)
 Record WorldState : Type :=
   mk_world_state {
@@ -103,6 +110,9 @@ Record WorldState : Type :=
       wst_feeholder_state: FeeHolderState;
       wst_feeholder_addr: address;
 
+      (* state of the current block *)
+      wst_block_state: BlockState;
+
       (* TODO: add states of other LPSC contracts and ... *)
     }.
 
@@ -119,6 +129,7 @@ Definition wst_update_trade_delegate
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := wst_feeholder_state wst;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_block_state := wst_block_state wst;
   |}.
 
 Definition wst_update_feeholder
@@ -134,6 +145,7 @@ Definition wst_update_feeholder
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := st;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_block_state := wst_block_state wst;
   |}.
 
 
@@ -150,4 +162,5 @@ Definition wst_update_erc20s
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := wst_feeholder_state wst;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_block_state := wst_block_state wst;
   |}.
