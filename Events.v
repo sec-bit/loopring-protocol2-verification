@@ -26,6 +26,8 @@ Inductive Event : Type :=
 | EvtBrokerRegistered (owner broker interceptor: address)
 | EvtBrokerUnregistered (owner broker interceptor: address)
 | EvtAllBrokersUnregistered (owner: address)
+(* OrderRegistry events *)
+| EvtOrderRegistered (owner: address) (hash: bytes32)
 (* to be defined *)
 .
 

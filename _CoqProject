@@ -5,6 +5,7 @@ TopModel.v
 BrokerRegistry.v
 ERC20.v
 FeeHolder.v
+OrderRegistry.v
 RingCanceller.v
 RingSubmitter.v
 TradeDelegate.v

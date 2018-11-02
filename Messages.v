@@ -119,6 +119,16 @@ Section BrokerRegistry.
 End BrokerRegistry.
 
 
+Section OrderRegistry.
+
+  Inductive OrderRegistryMsg : Type :=
+  | msg_isOrderHashRegistered (sender owner: address) (hash: bytes32)
+  | msg_registerOrderHash (sender: address) (hash: bytes32)
+  .
+
+End OrderRegistry.
+
+
 Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
 | MsgRingCanceller (msg: RingCancellerMsg)
@@ -126,5 +136,6 @@ Inductive Message : Type :=
 | MsgFeeHolder (msg: FeeHolderMsg)
 | MsgERC20 (msg: ERC20Msg)
 | MsgBrokerRegistry (msg: BrokerRegistryMsg)
+| MsgOrderRegistry (msg: OrderRegistryMsg)
 (* TODO: add messages of other LPSC contracts *)
 .

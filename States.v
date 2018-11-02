@@ -159,6 +159,14 @@ Record BrokerRegistryState : Type :=
     }.
 
 
+
+(** State of order registry *)
+Record OrderRegistryState : Type :=
+  mk_order_registry_state {
+      order_registry_hashMap: AH2B.t;
+    }.
+
+
 (** State of the block *)
 Record BlockState : Type :=
   mk_block_state {
@@ -187,6 +195,9 @@ Record WorldState : Type :=
       (* LPSC broker registry contract *)
       wst_broker_registry_state: BrokerRegistryState;
       wst_broker_registry_addr: address;
+      (* LPSC order registry contract *)
+      wst_order_registry_state: OrderRegistryState;
+      wst_order_registry_addr: address;
 
       (* state of the current block *)
       wst_block_state: BlockState;
@@ -209,6 +220,8 @@ Definition wst_update_trade_delegate
     wst_feeholder_addr := wst_feeholder_addr wst;
     wst_broker_registry_state := wst_broker_registry_state wst;
     wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -227,6 +240,8 @@ Definition wst_update_feeholder
     wst_feeholder_addr := wst_feeholder_addr wst;
     wst_broker_registry_state := wst_broker_registry_state wst;
     wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -246,6 +261,8 @@ Definition wst_update_erc20s
     wst_feeholder_addr := wst_feeholder_addr wst;
     wst_broker_registry_state := wst_broker_registry_state wst;
     wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -264,5 +281,27 @@ Definition wst_update_broker_registry
     wst_feeholder_addr := wst_feeholder_addr wst;
     wst_broker_registry_state := st;
     wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
+    wst_block_state := wst_block_state wst;
+  |}.
+
+Definition wst_update_order_registry
+           (wst: WorldState) (st: OrderRegistryState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := wst_ring_submitter_state wst;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := st;
+    wst_order_registry_addr := wst_order_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
