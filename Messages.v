@@ -104,11 +104,27 @@ Section ERC20.
 End ERC20.
 
 
+Section BrokerRegistry.
+
+  Inductive BrokerRegistryMsg : Type :=
+  | msg_getBroker (sender owner broker: address)
+  (* Due to the way we model BrokerRegistry::brokersMap, it's not
+     feasible to model the semantics of getBrokers() *)
+  (* | msg_getBrokers (sender owner: address) (s e: uint) *)
+  | msg_registerBroker (sender broker interceptor: address)
+  | msg_unregisterBroker (sender broker: address)
+  | msg_unregisterAllBrokers (sender: address)
+  .
+
+End BrokerRegistry.
+
+
 Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
 | MsgRingCanceller (msg: RingCancellerMsg)
 | MsgTradeDelegate (msg: TradeDelegateMsg)
 | MsgFeeHolder (msg: FeeHolderMsg)
 | MsgERC20 (msg: ERC20Msg)
+| MsgBrokerRegistry (msg: BrokerRegistryMsg)
 (* TODO: add messages of other LPSC contracts *)
 .

@@ -2,6 +2,7 @@
 
 TopModel.v
 
+BrokerRegistry.v
 ERC20.v
 FeeHolder.v
 RingCanceller.v

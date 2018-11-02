@@ -1,4 +1,6 @@
 Require Import
+        List.
+Require Import
         Maps
         Types.
 
@@ -84,6 +86,79 @@ Record FeeHolderState : Type :=
     }.
 
 
+(** State of BrokerRegistry *)
+Record Broker : Type :=
+  mk_broker {
+      broker_owner: address;
+      broker_addr: address;
+      broker_interceptor: address;
+    }.
+
+Module BrokerElem <: ElemType.
+  Definition elt := Broker.
+  Definition elt_zero : elt :=
+    {| broker_owner := 0; broker_addr := 0; broker_interceptor := 0 |}.
+  Definition elt_eq := fun b b': elt => b = b'.
+
+  Lemma elt_eq_dec:
+    forall (x y: elt), { x = y } + { ~ x = y }.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_refl:
+    forall x, elt_eq x x.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_symm:
+    forall x y, elt_eq x y -> elt_eq y x.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_trans:
+    forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
+  Proof.
+  Admitted.
+End BrokerElem.
+
+Module Brokers := Mapping Address_as_DT BrokerElem.
+
+Module BrokersElem <: ElemType.
+  Definition elt := Brokers.t.
+  Definition elt_zero := Brokers.empty.
+  Definition elt_eq := fun m m': elt => Brokers.map.Equal m m'.
+
+  Lemma elt_eq_dec:
+    forall (x y: elt), { x = y } + { ~ x = y }.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_refl:
+    forall x, elt_eq x x.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_symm:
+    forall x y, elt_eq x y -> elt_eq y x.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_trans:
+    forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
+  Proof.
+  Admitted.
+End BrokersElem.
+
+Module BrokersMap := Mapping Address_as_DT BrokersElem.
+
+Record BrokerRegistryState : Type :=
+  mk_broker_registry_state {
+      (* We model BrokerRegistry::brokersMap approximatively by a map
+        address -> address -> Broker *)
+      broker_registry_brokersMap : BrokersMap.t;
+    }.
+
+
 (** State of the block *)
 Record BlockState : Type :=
   mk_block_state {
@@ -109,6 +184,9 @@ Record WorldState : Type :=
       (* LPSC fee holder contract *)
       wst_feeholder_state: FeeHolderState;
       wst_feeholder_addr: address;
+      (* LPSC broker registry contract *)
+      wst_broker_registry_state: BrokerRegistryState;
+      wst_broker_registry_addr: address;
 
       (* state of the current block *)
       wst_block_state: BlockState;
@@ -129,6 +207,8 @@ Definition wst_update_trade_delegate
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := wst_feeholder_state wst;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -145,6 +225,8 @@ Definition wst_update_feeholder
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := st;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -162,5 +244,25 @@ Definition wst_update_erc20s
     wst_trade_delegate_addr := wst_trade_delegate_addr wst;
     wst_feeholder_state := wst_feeholder_state wst;
     wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_block_state := wst_block_state wst;
+  |}.
+
+Definition wst_update_broker_registry
+           (wst: WorldState) (st: BrokerRegistryState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := wst_ring_submitter_state wst;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := st;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.

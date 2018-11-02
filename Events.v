@@ -22,6 +22,10 @@ Inductive Event : Type :=
 | EvtOrdersCancelledByBroker (broker owner: address) (hashes: list bytes20)
 | EvtAllOrdersCancelledForTradingPairByBroker (broker owner token1 token2: address) (cutoff: uint)
 | EvtAllOrdersCancelledByBroker (broker owner: address) (cutoff: uint)
+(* BrokerRegistry events *)
+| EvtBrokerRegistered (owner broker interceptor: address)
+| EvtBrokerUnregistered (owner broker interceptor: address)
+| EvtAllBrokersUnregistered (owner: address)
 (* to be defined *)
 .
 

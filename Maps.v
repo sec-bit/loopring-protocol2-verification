@@ -67,6 +67,10 @@ Module Mapping (K: DecidableType) (Elt: ElemType).
 
   Definition upd (m: t) (k: K.t) (v: elt) : t := add k v m.
 
+  Definition del (m: t) (k: K.t) : t := remove k m.
+
+  Definition find (m: t) (k: K.t) : option elt := find k m.
+
   Definition equal (m m': t) := forall k, get m k = get m' k.
 End Mapping.
 
