@@ -64,33 +64,33 @@ Record Spendable : Type :=
 (* only model non-computed fields *)
 Record Order : Type :=
   mk_order {
-      owner                 : address;
-      tokenS                : address;
-      tokenB                : address;
-      amountS               : uint;
-      amountB               : uint;
-      validSince            : uint;
-      tokenSpendableS       : Spendable;
-      tokenSpendableFee     : Spendable;
+      order_owner                 : address;
+      order_tokenS                : address;
+      order_tokenB                : address;
+      order_amountS               : uint;
+      order_amountB               : uint;
+      order_validSince            : uint;
+      order_tokenSpendableS       : Spendable;
+      order_tokenSpendableFee     : Spendable;
       (** optional fields *)
-      dualAuthAddr          : address;
-      broker                : address;
-      brokerSpendableS      : Spendable;
-      brokerSpendableFee    : Spendable;
-      orderInterceptor      : address;
-      wallet                : address;
-      validUntil            : uint;
-      sig                   : bytes;
-      dualAuthSig           : bytes;
-      allOrNone             : bool;
-      feeToken              : address;
-      feeAmount             : uint;
-      feePercentage         : uint16;    (** Post-trading *)
-      waiveFeePercentage    : int16;
-      tokenSFeePercentage   : uint16;    (** Pre-trading *)
-      tokenBFeePercentage   : uint16;    (** Post-trading *)
-      tokenRecipient        : address;
-      walletSplitPercentage : uint16;
+      order_dualAuthAddr          : address;
+      order_broker                : address;
+      order_brokerSpendableS      : Spendable;
+      order_brokerSpendableFee    : Spendable;
+      order_orderInterceptor      : address;
+      order_wallet                : address;
+      order_validUntil            : uint;
+      order_sig                   : bytes;
+      order_dualAuthSig           : bytes;
+      order_allOrNone             : bool;
+      order_feeToken              : address;
+      order_feeAmount             : uint;
+      order_feePercentage         : uint16;    (** Post-trading *)
+      order_waiveFeePercentage    : int16;
+      order_tokenSFeePercentage   : uint16;    (** Pre-trading *)
+      order_tokenBFeePercentage   : uint16;    (** Post-trading *)
+      order_tokenRecipient        : address;
+      order_walletSplitPercentage : uint16;
     }.
 
 
@@ -98,5 +98,6 @@ Record Order : Type :=
 Record Ring : Type :=
   mk_ring {
       (* order positions in another order list *)
-      orders: list nat;
+      ring_orders: list nat;
+      ring_minerFeesToOrdersPercentage: uint;
     }.
