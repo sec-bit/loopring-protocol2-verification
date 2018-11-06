@@ -238,9 +238,9 @@ Section Func_batchGetFilledAndCheckCancelled.
     | param :: params' =>
       let fill :=
           if is_not_cancelled
-               st (order_broker param) (order_hash param) (order_tradingPair param)
+               st (order_param_broker param) (order_param_hash param) (order_param_tradingPair param)
           then
-            Some (H2V.get (delegate_filled st) (order_hash param))
+            Some (H2V.get (delegate_filled st) (order_param_hash param))
           else
             None
       in

@@ -42,11 +42,11 @@ Section TradeDelegate.
 
   Record OrderParam : Type :=
     mk_order_param {
-        order_broker: address;
-        order_owner: address;
-        order_hash: bytes20;
-        order_validSince: uint;
-        order_tradingPair: bytes20;
+        order_param_broker: address;
+        order_param_owner: address;
+        order_param_hash: bytes20;
+        order_param_validSince: uint;
+        order_param_tradingPair: bytes20;
       }.
 
   Inductive TradeDelegateMsg : Type :=
