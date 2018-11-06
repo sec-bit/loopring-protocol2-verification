@@ -246,12 +246,12 @@ Section Func_submitRings.
              (wst0 wst: WorldState)
              (sender: address)
              (orders: list Order) (rings: list Ring) (mining: Mining)
-    : (WorldState * Result) :=
+    : (WorldState * RetVal * list Event) :=
     let submitter_st := make_rt_submitter_state
                           (wst_ring_submitter_state wst) mining orders rings in
     let submitter_st := update_orders_hash submitter_st in
     (* TODO: *)
-    (wst, make_empty_result).
+    (wst, RetNone, nil).
 
 End Func_submitRings.
 
@@ -263,7 +263,7 @@ Parameter order_hash_dec: forall ord ord': Order,
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
   match msg with
   | msg_submitRings sender orders rings mining =>
     func_submitRings (order_hash := order_hash) wst0 wst sender orders rings mining

@@ -47,7 +47,7 @@ Section Func_authorizeAddress.
 
   Definition func_authorizeAddress
              (wst0 wst: WorldState) (sender addr: address)
-    : (WorldState * Result) :=
+    : (WorldState * RetVal * list Event) :=
     if authorizeAddress_sat_requirements wst sender addr then
       (
         let st := wst_trade_delegate_state wst in
@@ -64,14 +64,11 @@ Section Func_authorizeAddress.
             delegate_cutoffsOwner := delegate_cutoffsOwner st;
             delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
           |},
-
-        {|
-          res_events := EvtAddressAuthorized addr :: nil;
-          res_return := None;
-        |}
+        RetNone,
+        EvtAddressAuthorized addr :: nil
       )
     else
-      (wst0, make_revert_result).
+      (wst0, RetNone, EvtRevert :: nil).
 
 End Func_authorizeAddress.
 
@@ -80,9 +77,9 @@ Section Func_deauthorizeAddress.
 
   Definition func_deauthorizeAddress
              (wst0 wst: WorldState) (sender addr: address)
-    : (WorldState * Result) :=
+    : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_deauthorizeAddress.
 
@@ -90,14 +87,11 @@ End Func_deauthorizeAddress.
 Section Func_isAddressAuthorized.
 
   Definition func_isAddressAuthorized
-             (wst0 wst: WorldState) (sender addr: address) :=
+             (wst0 wst: WorldState) (sender addr: address)
+  : (WorldState * RetVal * list Event):=
     (wst,
-     {|
-       res_events := nil;
-       res_return := Some (Return
-                             (is_authorized_address
-                                (wst_trade_delegate_state wst) addr));
-     |}
+     RetBool (is_authorized_address (wst_trade_delegate_state wst) addr),
+     nil
     ).
 
 End Func_isAddressAuthorized.
@@ -107,10 +101,10 @@ Section Func_batchTransfer.
 
   Fixpoint func_batchTransfer
            (wst0 wst: WorldState) (sender: address) (params: list TransferParam)
-    : (WorldState * Result) :=
+    : (WorldState * RetVal * list Event) :=
     if authorized_and_nonsuspended (wst_trade_delegate_state wst) sender then
       match params with
-      | nil => (wst, {| res_events := nil; res_return := None |})
+      | nil => (wst, RetNone, nil)
       | param :: params' =>
         match ERC20_step wst0 wst
                          (msg_transferFrom (wst_trade_delegate_addr wst)
@@ -119,21 +113,21 @@ Section Func_batchTransfer.
                                            (transfer_to param)
                                            (transfer_amount param))
         with
-        | (wst', res') =>
-          if is_revert res' then
-            (wst0, make_revert_result)
+        | (wst', ret', evts') =>
+          if has_revert_event evts' then
+            (wst0, RetNone, EvtRevert :: nil)
           else
             match func_batchTransfer wst0 wst' sender params' with
-            | (wst'', res'') =>
-              if is_revert res'' then
-                (wst0, make_revert_result)
+            | (wst'', ret'', evts'') =>
+              if has_revert_event evts'' then
+                (wst0, RetNone, EvtRevert :: nil)
               else
-                (wst'', concat_results res' res'')
+                (wst'', ret'', evts' ++ evts'')
             end
         end
       end
     else
-      (wst0, make_revert_result).
+      (wst0, RetNone, EvtRevert :: nil).
 
 End Func_batchTransfer.
 
@@ -142,9 +136,9 @@ Section Func_batchUpdateFilled.
 
   Definition func_batchUpdateFilled
              (wst0 wst: WorldState) (sender: address) (params: list FilledParam)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_batchUpdateFilled.
 
@@ -153,7 +147,7 @@ Section Func_setCancelled.
 
   Definition func_setCancelled
              (wst0 wst: WorldState) (sender broker: address) (orderHash: bytes32)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     if authorized_and_nonsuspended (wst_trade_delegate_state wst) sender then
       let st := wst_trade_delegate_state wst in
       (wst_update_trade_delegate
@@ -169,10 +163,11 @@ Section Func_setCancelled.
            delegate_cutoffsOwner := delegate_cutoffsOwner st;
            delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
          |},
-       make_empty_result
+       RetNone,
+       nil
       )
     else
-      (wst0, make_revert_result).
+      (wst0, RetNone, EvtRevert :: nil).
 
 End Func_setCancelled.
 
@@ -181,9 +176,9 @@ Section Func_setCutoffs.
 
   Definition func_setCutoffs
              (wst0 wst: WorldState) (sender broker: address) (cutoff: uint)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_setCutoffs.
 
@@ -192,9 +187,9 @@ Section Func_setTradingPairCutoffs.
 
   Definition func_setTradingPairCutoffs
              (wst0 wst: WorldState) (sender broker: address) (tokenPair: bytes20) (cutoff: uint)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_setTradingPairCutoffs.
 
@@ -203,9 +198,9 @@ Section Func_setCutoffsOfOwner.
 
   Definition func_setCutoffsOfOwner
              (wst0 wst: WorldState) (sender broker owner: address) (cutoff: uint)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_setCutoffsOfOwner.
 
@@ -215,9 +210,9 @@ Section Func_setTradingPairCutoffsOfOwner.
   Definition func_setTradingPairCutoffsOfOwner
              (wst0 wst: WorldState)
              (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_setTradingPairCutoffsOfOwner.
 
@@ -249,13 +244,10 @@ Section Func_batchGetFilledAndCheckCancelled.
 
   Definition func_batchGetFilledAndCheckCancelled
              (wst0 wst: WorldState) (sender: address) (params: list OrderParam)
-    : (WorldState * Result) :=
+    : (WorldState * RetVal * list Event) :=
     (wst,
-     {|
-       res_events := nil;
-       res_return := Some (Return
-                             (build_fills (wst_trade_delegate_state wst) params));
-     |}
+     RetFills (build_fills (wst_trade_delegate_state wst) params),
+     nil
     ).
 
 End Func_batchGetFilledAndCheckCancelled.
@@ -265,9 +257,9 @@ Section Func_suspend.
 
   Definition func_suspend
              (wst0 wst: WorldState) (sender: address)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_suspend.
 
@@ -276,9 +268,9 @@ Section Func_resume.
 
   Definition func_resume
              (wst0 wst: WorldState) (sender: address)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_resume.
 
@@ -287,16 +279,16 @@ Section Func_kill.
 
   Definition func_kill
              (wst0 wst: WorldState) (sender: address)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
-    (wst0, make_empty_result).
+    (wst0, RetNone, nil).
 
 End Func_kill.
 
 
 Definition TradeDelegate_step
            (wst0 wst: WorldState) (msg: TradeDelegateMsg)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
   match msg with
   | msg_authorizeAddress sender addr =>
     func_authorizeAddress wst0 wst sender addr

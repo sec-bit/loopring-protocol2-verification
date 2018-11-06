@@ -1,4 +1,6 @@
 Require Import
+        List.
+Require Import
         Events
         LibModel
         Maps
@@ -19,12 +21,11 @@ Section Func_isOrderHashRegistered.
 
   Definition func_isOrderHashRegistered
              (wst0 wst: WorldState) (sender owner: address) (hash: bytes32)
-  : WorldState * Result :=
+  : WorldState * RetVal * list Event :=
     (wst,
-     {|
-       res_events := nil;
-       res_return := Some (Return (AH2B.get (get_hashMap wst) (owner, hash)));
-     |}).
+     RetBool (AH2B.get (get_hashMap wst) (owner, hash)),
+     nil
+    ).
 
 End Func_isOrderHashRegistered.
 
@@ -33,21 +34,20 @@ Section Func_registerOrderHash.
 
   Definition func_registerOrderHash
              (wst0 wst: WorldState) (sender: address) (hash: bytes32)
-  : WorldState * Result :=
+  : WorldState * RetVal * list Event :=
     let hashMap := get_hashMap wst in
     let hashMap' := AH2B.upd hashMap (sender, hash) true in
     (wst_update_order_registry wst {| order_registry_hashMap := hashMap' |},
-     {|
-       res_events := EvtOrderRegistered sender hash :: nil;
-       res_return := None;
-     |}).
+     RetNone,
+     EvtOrderRegistered sender hash :: nil
+    ).
 
 End Func_registerOrderHash.
 
 
 Definition OrderRegistry_step
            (wst0 wst: WorldState) (msg: OrderRegistryMsg)
-  : (WorldState * Result) :=
+  : (WorldState * RetVal * list Event) :=
   match msg with
   | msg_isOrderHashRegistered sender owner hash =>
     func_isOrderHashRegistered wst0 wst sender owner hash
