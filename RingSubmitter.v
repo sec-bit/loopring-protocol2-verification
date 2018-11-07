@@ -1,5 +1,6 @@
 Require Import
-        List.
+        List
+        ZArith.
 Require Import
         Events
         LibModel
@@ -13,6 +14,7 @@ Require Import
         TradeDelegate.
 
 Open Scope list_scope.
+Open Scope bool_scope.
 
 
 Set Implicit Arguments.
@@ -185,6 +187,7 @@ Section DataTypes.
     {|
       ord_rt_order :=
         {|
+          order_version               := order_version               order;
           order_owner                 := order_owner                 order;
           order_tokenS                := order_tokenS                order;
           order_tokenB                := order_tokenB                order;
@@ -279,6 +282,7 @@ Section DataTypes.
     {|
       ord_rt_order :=
         {|
+          order_version               := order_version               order;
           order_owner                 := order_owner                 order;
           order_tokenS                := order_tokenS                order;
           order_tokenB                := order_tokenB                order;
@@ -538,6 +542,51 @@ Section Func_submitRings.
 
   End UpdateBrokerSpendables.
 
+
+  Section CheckOrders.
+
+    Definition is_order_valid (order: OrderRuntimeState) (now: uint) : bool :=
+      let static_order := ord_rt_order order in
+      (ord_rt_valid order) &&
+      (Nat.eqb (order_version static_order) 0) &&
+      (negb (Nat.eqb (order_owner static_order) 0)) &&
+      (negb (Nat.eqb (order_tokenS static_order) 0)) &&
+      (negb (Nat.eqb (order_tokenB static_order) 0)) &&
+      (negb (Nat.eqb (order_amountS static_order) 0)) &&
+      (negb (Nat.eqb (order_feeToken static_order) 0)) &&
+      (Nat.ltb (order_feePercentage static_order) FEE_PERCENTAGE_BASE_N) &&
+      (Nat.ltb (order_tokenSFeePercentage static_order) FEE_PERCENTAGE_BASE_N) &&
+      (Nat.ltb (order_tokenBFeePercentage static_order) FEE_PERCENTAGE_BASE_N) &&
+      (Nat.leb (order_walletSplitPercentage static_order) 100) &&
+      (Nat.leb (order_validSince static_order) now) &&
+      (Nat.eqb (order_validUntil static_order) 0 ||
+       Nat.ltb now (order_validUntil static_order)) &&
+      (Z.leb (order_waiveFeePercentage static_order) FEE_PERCENTAGE_BASE_Z) &&
+      (Z.leb (- FEE_PERCENTAGE_BASE_Z) (order_waiveFeePercentage static_order)) &&
+      (Nat.eqb (order_dualAuthAddr static_order) 0 ||
+       Nat.ltb 0 (length (order_dualAuthSig static_order)))
+      (* TODO: model signature check *)
+    .
+
+    Fixpoint __check_orders
+             (orders: list OrderRuntimeState) (now: uint)
+      : list OrderRuntimeState :=
+      match orders with
+      | nil => nil
+      | order :: orders' =>
+        upd_order_valid order (is_order_valid order now) :: __check_orders orders' now
+      end.
+
+    Definition check_orders
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+    : (WorldState * RingSubmitterRuntimeState * list Event) :=
+      let orders' := __check_orders (submitter_rt_orders st)
+                                    (block_timestamp (wst_block_state wst)) in
+      (wst, submitter_update_orders st orders', nil).
+
+  End CheckOrders.
+
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -567,7 +616,8 @@ Section Func_submitRings.
     match (update_orders_hash ;;
            update_orders_broker_interceptor ;;
            get_filled_and_check_cancelled ;;
-           update_broker_spendables) wst0 wst st
+           update_broker_spendables ;;
+           check_orders) wst0 wst st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then

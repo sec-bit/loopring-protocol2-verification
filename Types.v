@@ -8,7 +8,7 @@ Definition uint : Type := nat.
 Definition uint16 : Type := nat.
 Definition uint64 : Type := nat.
 Definition uint256 : Type := nat.
-Definition int16 : Type := nat.
+Definition int16 : Type := Z.
 Definition byte : Type := nat.
 Definition bytes20 : Type := nat.
 Definition bytes32 : Type := nat.
@@ -64,6 +64,7 @@ Record Spendable : Type :=
 (* only model non-computed fields *)
 Record Order : Type :=
   mk_order {
+      order_version               : uint;
       order_owner                 : address;
       order_tokenS                : address;
       order_tokenB                : address;
@@ -101,3 +102,6 @@ Record Ring : Type :=
       ring_orders: list nat;
       ring_minerFeesToOrdersPercentage: uint;
     }.
+
+Notation FEE_PERCENTAGE_BASE_N := (1000%nat).
+Notation FEE_PERCENTAGE_BASE_Z := (1000%Z).
