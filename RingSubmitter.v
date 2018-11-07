@@ -9,7 +9,8 @@ Require Import
         Types.
 Require Import
         BrokerRegistry
-        OrderRegistry.
+        OrderRegistry
+        TradeDelegate.
 
 Open Scope list_scope.
 
@@ -245,6 +246,32 @@ Section DataTypes.
       ord_rt_valid                := valid;
     |}.
 
+  Definition upd_order_init_filled
+             (ord: OrderRuntimeState) (amount: uint)
+    : OrderRuntimeState :=
+    {|
+      ord_rt_order                := ord_rt_order ord;
+      ord_rt_p2p                  := ord_rt_p2p ord;
+      ord_rt_hash                 := ord_rt_hash ord;
+      ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+      ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+      ord_rt_initialFilledAmountS := amount;
+      ord_rt_valid                := ord_rt_valid ord;
+    |}.
+
+  Definition upd_order_filled
+             (ord: OrderRuntimeState) (amount: uint)
+    : OrderRuntimeState :=
+    {|
+      ord_rt_order                := ord_rt_order ord;
+      ord_rt_p2p                  := ord_rt_p2p ord;
+      ord_rt_hash                 := ord_rt_hash ord;
+      ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+      ord_rt_filledAmountS        := amount;
+      ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+      ord_rt_valid                := ord_rt_valid ord;
+    |}.
+
 End DataTypes.
 
 
@@ -379,6 +406,74 @@ Section Func_submitRings.
 
   End UpdateOrdersBrokernAndInterceptor.
 
+
+  Section GetFilledAndCancelled.
+
+    Fixpoint build_order_params
+             (orders: list OrderRuntimeState) : list OrderParam :=
+      match orders with
+      | nil => nil
+      | order :: orders' =>
+        let static_order := ord_rt_order order in
+        let param :=
+            {|
+              order_param_broker := order_broker static_order;
+              order_param_owner  := order_owner static_order;
+              order_param_hash   := ord_rt_hash order;
+              order_param_validSince := order_validSince static_order;
+              order_param_tradingPair := Nat.lxor (order_tokenS static_order) (order_tokenB static_order);
+            |}
+        in param :: build_order_params orders'
+      end.
+
+    Definition update_order_filled
+               (order: OrderRuntimeState) (filled: option uint)
+      : OrderRuntimeState :=
+      match filled with
+      | None => upd_order_valid order false
+      | Some amount => upd_order_filled (upd_order_init_filled order amount)
+                                       amount
+      end.
+
+    Fixpoint update_orders_filled
+             (orders: list OrderRuntimeState) (fills: list (option uint))
+      : list OrderRuntimeState :=
+      match orders with
+      | nil => nil
+      | order :: orders' =>
+        match fills with
+        | nil => nil
+        | filled :: fills' =>
+          update_order_filled order filled :: update_orders_filled orders' fills'
+        end
+      end.
+
+    Definition get_filled_and_check_cancelled
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+      : (WorldState * RingSubmitterRuntimeState * list Event) :=
+      let params := build_order_params (submitter_rt_orders st) in
+      match TradeDelegate_step
+              wst0 wst (msg_batchGetFilledAndCheckCancelled (wst_ring_submitter_addr wst) params)
+      with
+      | (wst', ret', evts') =>
+        if has_revert_event evts' then
+          (wst0, st, EvtRevert :: nil)
+        else
+          match ret' with
+          | RetFills fills =>
+            let orders := submitter_rt_orders st in
+            if Nat.eqb (length fills) (length orders) then
+              (wst',
+               submitter_update_orders st (update_orders_filled orders fills),
+               evts')
+            else
+              (wst0, st, EvtRevert :: nil)
+          | _ => (wst0, st, EvtRevert :: nil)
+          end
+      end.
+
+  End GetFilledAndCancelled.
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -405,7 +500,10 @@ Section Func_submitRings.
              (orders: list Order) (rings: list Ring) (mining: Mining)
     : (WorldState * RetVal * list Event) :=
     let st := make_rt_submitter_state mining orders rings in
-    match (update_orders_hash ;; update_orders_broker_interceptor) wst0 wst st with
+    match (update_orders_hash ;;
+           update_orders_broker_interceptor ;;
+           get_filled_and_check_cancelled) wst0 wst st
+    with
     | (wst', st', evts') =>
       if has_revert_event evts' then
         (wst0, RetNone, EvtRevert :: nil)
