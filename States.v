@@ -305,3 +305,23 @@ Definition wst_update_order_registry
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
+
+Definition wst_update_ring_submitter
+           (wst: WorldState) (st: RingSubmitterState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := st;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
+    wst_block_state := wst_block_state wst;
+  |}.

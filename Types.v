@@ -74,10 +74,10 @@ Record Order : Type :=
       order_tokenSpendableFee     : Spendable;
       (** optional fields *)
       order_dualAuthAddr          : address;
-      order_broker                : address;
+      order_broker                : address; (* mutated in updateBrokerAndInterceptor() *)
       order_brokerSpendableS      : Spendable;
       order_brokerSpendableFee    : Spendable;
-      order_orderInterceptor      : address;
+      order_orderInterceptor      : address; (* mutated in updateBrokerAndinterceptor() *)
       order_wallet                : address;
       order_validUntil            : uint;
       order_sig                   : bytes;
