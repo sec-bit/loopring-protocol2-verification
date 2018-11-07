@@ -272,6 +272,48 @@ Section DataTypes.
       ord_rt_valid                := ord_rt_valid ord;
     |}.
 
+  Definition clear_order_broker_spendables
+             (ord: OrderRuntimeState)
+    : OrderRuntimeState :=
+    let order := ord_rt_order ord in
+    {|
+      ord_rt_order :=
+        {|
+          order_owner                 := order_owner                 order;
+          order_tokenS                := order_tokenS                order;
+          order_tokenB                := order_tokenB                order;
+          order_amountS               := order_amountS               order;
+          order_amountB               := order_amountB               order;
+          order_validSince            := order_validSince            order;
+          order_tokenSpendableS       := order_tokenSpendableS       order;
+          order_tokenSpendableFee     := order_tokenSpendableFee     order;
+          order_dualAuthAddr          := order_dualAuthAddr          order;
+          order_broker                := order_broker                order;
+          order_brokerSpendableS      := mk_spendable false 0 0;
+          order_brokerSpendableFee    := mk_spendable false 0 0;
+          order_orderInterceptor      := order_orderInterceptor      order;
+          order_wallet                := order_wallet                order;
+          order_validUntil            := order_validUntil            order;
+          order_sig                   := order_sig                   order;
+          order_dualAuthSig           := order_dualAuthSig           order;
+          order_allOrNone             := order_allOrNone             order;
+          order_feeToken              := order_feeToken              order;
+          order_feeAmount             := order_feeAmount             order;
+          order_feePercentage         := order_feePercentage         order;
+          order_waiveFeePercentage    := order_waiveFeePercentage    order;
+          order_tokenSFeePercentage   := order_tokenSFeePercentage   order;
+          order_tokenBFeePercentage   := order_tokenBFeePercentage   order;
+          order_tokenRecipient        := order_tokenRecipient        order;
+          order_walletSplitPercentage := order_walletSplitPercentage order;
+        |};
+      ord_rt_p2p                  := ord_rt_p2p ord;
+      ord_rt_hash                 := ord_rt_hash ord;
+      ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+      ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+      ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+      ord_rt_valid                := ord_rt_valid ord;
+    |}.
+
 End DataTypes.
 
 
@@ -474,6 +516,28 @@ Section Func_submitRings.
 
   End GetFilledAndCancelled.
 
+
+  Section UpdateBrokerSpendables.
+
+    Fixpoint __update_orders_spendables
+             (orders: list OrderRuntimeState)
+    : list OrderRuntimeState :=
+      match orders with
+      | nil => nil
+      | order :: orders' =>
+        (* ??? *)
+        clear_order_broker_spendables order :: __update_orders_spendables orders'
+      end.
+
+    Definition update_broker_spendables
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+    : (WorldState * RingSubmitterRuntimeState * list Event) :=
+      (wst,
+       submitter_update_orders st (__update_orders_spendables (submitter_rt_orders st)),
+       nil).
+
+  End UpdateBrokerSpendables.
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -502,7 +566,8 @@ Section Func_submitRings.
     let st := make_rt_submitter_state mining orders rings in
     match (update_orders_hash ;;
            update_orders_broker_interceptor ;;
-           get_filled_and_check_cancelled) wst0 wst st
+           get_filled_and_check_cancelled ;;
+           update_broker_spendables) wst0 wst st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then

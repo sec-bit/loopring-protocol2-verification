@@ -75,8 +75,8 @@ Record Order : Type :=
       (** optional fields *)
       order_dualAuthAddr          : address;
       order_broker                : address; (* mutated in updateBrokerAndInterceptor() *)
-      order_brokerSpendableS      : Spendable;
-      order_brokerSpendableFee    : Spendable;
+      order_brokerSpendableS      : Spendable;  (* cleared by updateBrokerSpendables() *)
+      order_brokerSpendableFee    : Spendable;  (* cleared by updateBrokerSpendables() *)
       order_orderInterceptor      : address; (* mutated in updateBrokerAndinterceptor() *)
       order_wallet                : address;
       order_validUntil            : uint;
