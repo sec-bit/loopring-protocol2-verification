@@ -177,9 +177,9 @@ Section Func_setCutoffs.
   Definition func_setCutoffs
              (wst0 wst: WorldState) (sender broker: address) (cutoff: uint)
   : (WorldState * RetVal * list Event) :=
+    let st := wst_trade_delegate_state wst in
     if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-                (Nat.ltb ((delegate_cutoffs st) (broker)) cutoff) then
-       let st := wst_trade_delegate_state wst in
+                (Nat.ltb (A2V.get (delegate_cutoffs st) (broker)) cutoff) then
        (wst_update_trade_delegate
        wst
        {|
@@ -207,9 +207,9 @@ Section Func_setTradingPairCutoffs.
   Definition func_setTradingPairCutoffs
              (wst0 wst: WorldState) (sender broker: address) (tokenPair: bytes20) (cutoff: uint)
   : (WorldState * RetVal * list Event) :=
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-           (Nat.ltb ((delegate_tradingPairCutoffs st) (broker, tokenPair)) cutoff) then
     let st := wst_trade_delegate_state wst in
+    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
+           (Nat.ltb (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)) cutoff) then
        (wst_update_trade_delegate
        wst
        {|
@@ -219,7 +219,7 @@ Section Func_setTradingPairCutoffs.
           delegate_filled := delegate_filled st;
           delegate_cancelled := delegate_cancelled st;
           delegate_cutoffs := delegate_cutoffs st;
-          delegate_tradingPairCutoffs := AH2B.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
+          delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
           delegate_cutoffsOwner := delegate_cutoffsOwner st;
           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
        |},
@@ -237,9 +237,9 @@ Section Func_setCutoffsOfOwner.
   Definition func_setCutoffsOfOwner
              (wst0 wst: WorldState) (sender broker owner: address) (cutoff: uint)
   : (WorldState * RetVal * list Event) :=
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-            (Nat.ltb ((delegate_cutoffsOwner st) (broker, owner)) cutoff) then
     let st := wst_trade_delegate_state wst in
+    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
+            (Nat.ltb (AA2V.get (delegate_cutoffsOwner st) (broker, owner)) cutoff) then
         (wst_update_trade_delegate
             wst
             {|
@@ -268,10 +268,10 @@ Section Func_setTradingPairCutoffsOfOwner.
              (wst0 wst: WorldState)
              (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint)
   : (WorldState * RetVal * list Event) :=
+    let st := wst_trade_delegate_state wst in
       if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-              (Nat.ltb ((delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)) cutoff) then
-      let st := wst_trade_delegate_state wst in
-          (wst_update_trade_delegate
+              (Nat.ltb (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)) cutoff) then
+        (wst_update_trade_delegate
               wst
               {|
                delegate_owner := delegate_owner st;
