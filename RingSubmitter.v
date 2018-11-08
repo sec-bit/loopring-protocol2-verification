@@ -356,6 +356,21 @@ Section DataTypes.
       mining_rt_interceptor := interceptor;
     |}.
 
+  Definition upd_mining_miner
+             (m: MiningRuntimeState) (miner: address)
+    : MiningRuntimeState :=
+    let mining := mining_rt_static m in
+    {|
+      mining_rt_static      :=
+        {|
+          mining_feeRecipient := mining_feeRecipient mining;
+          mining_miner        := miner;
+          mining_sig          := mining_sig mining;
+        |};
+      mining_rt_hash        := mining_rt_hash m;
+      mining_rt_interceptor := mining_rt_interceptor m;
+    |}.
+
 End DataTypes.
 
 
@@ -710,6 +725,22 @@ Section Func_submitRings.
   End UpdateMiningHash.
 
 
+  Section UpdateMinerAndInterceptor.
+
+    Definition update_miner_interceptor
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+    : WorldState * RingSubmitterRuntimeState * list Event :=
+      let mining := submitter_rt_mining st in
+      let static_mining := mining_rt_static mining in
+      match mining_miner static_mining with
+      | O => (wst,
+             submitter_update_mining st (upd_mining_miner mining (mining_feeRecipient static_mining)),
+             nil)
+      | _ => (wst, st, nil)
+      end.
+
+  End UpdateMinerAndInterceptor.
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -742,7 +773,8 @@ Section Func_submitRings.
            update_broker_spendables ;;
            check_orders ;;
            update_rings_hash ;;
-           update_mining_hash) wst0 wst st
+           update_mining_hash ;;
+           update_miner_interceptor) wst0 wst st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
