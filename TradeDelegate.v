@@ -77,7 +77,7 @@ Section Func_deauthorizeAddress.
 
   Definition func_deauthorizeAddress
              (wst0 wst: WorldState) (sender addr: address)
-    : (WorldState * RetVal * list Event) :=
+  : (WorldState * RetVal * list Event) :=
     (* TODO: to be defined *)
     (wst0, RetNone, nil).
 
@@ -101,7 +101,7 @@ Section Func_batchTransfer.
 
   Fixpoint func_batchTransfer
            (wst0 wst: WorldState) (sender: address) (params: list TransferParam)
-    : (WorldState * RetVal * list Event) :=
+  : (WorldState * RetVal * list Event) :=
     if authorized_and_nonsuspended (wst_trade_delegate_state wst) sender then
       match params with
       | nil => (wst, RetNone, nil)
@@ -179,25 +179,25 @@ Section Func_setCutoffs.
   : (WorldState * RetVal * list Event) :=
     let st := wst_trade_delegate_state wst in
     if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-                (Nat.ltb (A2V.get (delegate_cutoffs st) (broker)) cutoff) then
-       (wst_update_trade_delegate
-       wst
-       {|
-         delegate_owner := delegate_owner st;
-         delegate_suspended := delegate_suspended st;
-         delegate_authorizedAddresses := delegate_authorizedAddresses st;
-         delegate_filled := delegate_filled st;
-         delegate_cancelled := delegate_cancelled st;
-         delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff; (*TODO check this line*)
-         delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-         delegate_cutoffsOwner := delegate_cutoffsOwner st;
-         delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-       |},
+            (Nat.ltb (A2V.get (delegate_cutoffs st) (broker)) cutoff) then
+      (wst_update_trade_delegate
+         wst
+         {|
+           delegate_owner := delegate_owner st;
+           delegate_suspended := delegate_suspended st;
+           delegate_authorizedAddresses := delegate_authorizedAddresses st;
+           delegate_filled := delegate_filled st;
+           delegate_cancelled := delegate_cancelled st;
+           delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff; (*TODO check this line*)
+           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+           delegate_cutoffsOwner := delegate_cutoffsOwner st;
+           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+         |},
        RetNone,
        nil
-       )
+      )
     else
-       (wst0, RetNone, EvtRevert :: nil).
+      (wst0, RetNone, EvtRevert :: nil).
 
 End Func_setCutoffs.
 
@@ -209,23 +209,23 @@ Section Func_setTradingPairCutoffs.
   : (WorldState * RetVal * list Event) :=
     let st := wst_trade_delegate_state wst in
     if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-           (Nat.ltb (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)) cutoff) then
-       (wst_update_trade_delegate
-       wst
-       {|
-          delegate_owner := delegate_owner st;
-          delegate_suspended := delegate_suspended st;
-          delegate_authorizedAddresses := delegate_authorizedAddresses st;
-          delegate_filled := delegate_filled st;
-          delegate_cancelled := delegate_cancelled st;
-          delegate_cutoffs := delegate_cutoffs st;
-          delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
-          delegate_cutoffsOwner := delegate_cutoffsOwner st;
-          delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-       |},
+            (Nat.ltb (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)) cutoff) then
+      (wst_update_trade_delegate
+         wst
+         {|
+           delegate_owner := delegate_owner st;
+           delegate_suspended := delegate_suspended st;
+           delegate_authorizedAddresses := delegate_authorizedAddresses st;
+           delegate_filled := delegate_filled st;
+           delegate_cancelled := delegate_cancelled st;
+           delegate_cutoffs := delegate_cutoffs st;
+           delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
+           delegate_cutoffsOwner := delegate_cutoffsOwner st;
+           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+         |},
        RetNone,
        nil
-       )
+      )
     else
       (wst0, RetNone, EvtRevert :: nil).
 
@@ -240,22 +240,22 @@ Section Func_setCutoffsOfOwner.
     let st := wst_trade_delegate_state wst in
     if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
             (Nat.ltb (AA2V.get (delegate_cutoffsOwner st) (broker, owner)) cutoff) then
-        (wst_update_trade_delegate
-            wst
-            {|
-             delegate_owner := delegate_owner st;
-             delegate_suspended := delegate_suspended st;
-             delegate_authorizedAddresses := delegate_authorizedAddresses st;
-             delegate_filled := delegate_filled st;
-             delegate_cancelled := delegate_cancelled st;
-             delegate_cutoffs := delegate_cutoffs st;
-             delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-             delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff; (*TODO check this line*)
-             delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-            |},
-            RetNone,
-            nil
-        )
+      (wst_update_trade_delegate
+         wst
+         {|
+           delegate_owner := delegate_owner st;
+           delegate_suspended := delegate_suspended st;
+           delegate_authorizedAddresses := delegate_authorizedAddresses st;
+           delegate_filled := delegate_filled st;
+           delegate_cancelled := delegate_cancelled st;
+           delegate_cutoffs := delegate_cutoffs st;
+           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+           delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff; (*TODO check this line*)
+           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+         |},
+       RetNone,
+       nil
+      )
     else
       (wst0, RetNone, EvtRevert :: nil).
 
@@ -269,26 +269,26 @@ Section Func_setTradingPairCutoffsOfOwner.
              (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint)
   : (WorldState * RetVal * list Event) :=
     let st := wst_trade_delegate_state wst in
-      if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-              (Nat.ltb (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)) cutoff) then
-        (wst_update_trade_delegate
-              wst
-              {|
-               delegate_owner := delegate_owner st;
-               delegate_suspended := delegate_suspended st;
-               delegate_authorizedAddresses := delegate_authorizedAddresses st;
-               delegate_filled := delegate_filled st;
-               delegate_cancelled := delegate_cancelled st;
-               delegate_cutoffs := delegate_cutoffs st;
-               delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-               delegate_cutoffsOwner := delegate_cutoffsOwner st;
-               delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff; (*TODO check this line*)
-              |},
-              RetNone,
-              nil
-          )
-      else
-        (wst0, RetNone, EvtRevert :: nil).
+    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
+            (Nat.ltb (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)) cutoff) then
+      (wst_update_trade_delegate
+         wst
+         {|
+           delegate_owner := delegate_owner st;
+           delegate_suspended := delegate_suspended st;
+           delegate_authorizedAddresses := delegate_authorizedAddresses st;
+           delegate_filled := delegate_filled st;
+           delegate_cancelled := delegate_cancelled st;
+           delegate_cutoffs := delegate_cutoffs st;
+           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+           delegate_cutoffsOwner := delegate_cutoffsOwner st;
+           delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff; (*TODO check this line*)
+         |},
+       RetNone,
+       nil
+      )
+    else
+      (wst0, RetNone, EvtRevert :: nil).
 
 End Func_setTradingPairCutoffsOfOwner.
 
