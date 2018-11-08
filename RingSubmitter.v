@@ -124,16 +124,16 @@ Section DataTypes.
       part_fillAmountB := 0;
     |}.
 
-  Fixpoint make_participations (nr_ords: nat): list Participation :=
-    match nr_ords with
-    | O => nil
-    | S n => make_participation n :: make_participations n
+  Fixpoint make_participations (ord_indices: list nat): list Participation :=
+    match ord_indices with
+    | nil => nil
+    | idx :: indices' => make_participation idx :: make_participations indices'
     end.
 
   Definition make_rt_ring (ring: Ring): RingRuntimeState :=
     {|
       ring_rt_static := ring;
-      ring_rt_participations := make_participations (length (ring_orders ring));
+      ring_rt_participations := make_participations (ring_orders ring);
       ring_rt_hash := 0;
       ring_rt_valid := true;
     |}.
@@ -316,6 +316,26 @@ Section DataTypes.
       ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
       ord_rt_valid                := ord_rt_valid ord;
+    |}.
+
+  Definition upd_ring_hash
+             (r: RingRuntimeState) (hash: bytes32)
+    : RingRuntimeState :=
+    {|
+      ring_rt_static         := ring_rt_static r;
+      ring_rt_participations := ring_rt_participations r;
+      ring_rt_hash           := hash;
+      ring_rt_valid          := ring_rt_valid r;
+    |}.
+
+  Definition upd_ring_valid
+             (r: RingRuntimeState) (valid: bool)
+    : RingRuntimeState :=
+    {|
+      ring_rt_static         := ring_rt_static r;
+      ring_rt_participations := ring_rt_participations r;
+      ring_rt_hash           := ring_rt_hash r;
+      ring_rt_valid          := valid;
     |}.
 
 End DataTypes.
@@ -587,6 +607,57 @@ Section Func_submitRings.
   End CheckOrders.
 
 
+  (* Again, we use an abstract function to model the calculation of ring hash. *)
+  Context `{ring_hash: RingRuntimeState -> list OrderRuntimeState -> bytes32}.
+
+  Fixpoint __get_ring_hash_preimg
+           (ps: list Participation) (orders: list OrderRuntimeState)
+    : list (option (bytes32 * int16)):=
+    match ps with
+    | nil => nil
+    | p :: ps' =>
+      let ord_idx := part_order_idx p in
+      let preimg := match nth_error orders ord_idx with
+                    | None => None
+                    | Some order => Some (ord_rt_hash order,
+                                         order_waiveFeePercentage (ord_rt_order order))
+                    end
+      in preimg :: __get_ring_hash_preimg ps' orders
+    end.
+
+  Definition get_ring_hash_preimg
+             (st: RingRuntimeState) (orders: list OrderRuntimeState)
+    : list (option (bytes32 * int16)):=
+    __get_ring_hash_preimg (ring_rt_participations st) orders.
+
+  Context `{ring_hash_dec: forall (r r': RingRuntimeState) (orders: list OrderRuntimeState),
+              (get_ring_hash_preimg r orders = get_ring_hash_preimg r' orders ->
+               ring_hash r orders = ring_hash r' orders) /\
+              (get_ring_hash_preimg r orders <> get_ring_hash_preimg r' orders ->
+               ring_hash r orders <> ring_hash r' orders)}.
+
+  Section UpdateRingsHash.
+
+    Fixpoint __update_rings_hash
+             (rings: list RingRuntimeState) (orders: list OrderRuntimeState)
+    : list RingRuntimeState :=
+      match rings with
+      | nil => nil
+      | r :: rings' =>
+        upd_ring_hash r (ring_hash r orders) :: __update_rings_hash rings' orders
+      end.
+
+    Definition update_rings_hash
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+      : WorldState * RingSubmitterRuntimeState * (list Event) :=
+      (wst,
+       submitter_update_rings
+         st (__update_rings_hash (submitter_rt_rings st) (submitter_rt_orders st)),
+       nil).
+
+  End UpdateRingsHash.
+
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -617,7 +688,8 @@ Section Func_submitRings.
            update_orders_broker_interceptor ;;
            get_filled_and_check_cancelled ;;
            update_broker_spendables ;;
-           check_orders) wst0 wst st
+           check_orders ;;
+           update_rings_hash) wst0 wst st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
@@ -633,11 +705,18 @@ Parameter order_hash: Order -> bytes32.
 Parameter order_hash_dec: forall ord ord': Order,
     (get_order_hash_preimg ord = get_order_hash_preimg ord' -> order_hash ord = order_hash ord') /\
     (get_order_hash_preimg ord <> get_order_hash_preimg ord' -> order_hash ord <> order_hash ord').
+Parameter ring_hash: RingRuntimeState -> list OrderRuntimeState -> bytes32.
+Parameter ring_hash_dec: forall (r r': RingRuntimeState) (orders: list OrderRuntimeState),
+    (get_ring_hash_preimg r orders = get_ring_hash_preimg r' orders ->
+     ring_hash r orders = ring_hash r' orders) /\
+    (get_ring_hash_preimg r orders <> get_ring_hash_preimg r' orders ->
+     ring_hash r orders <> ring_hash r' orders).
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
   : (WorldState * RetVal * list Event) :=
   match msg with
   | msg_submitRings sender orders rings mining =>
-    func_submitRings (order_hash := order_hash) wst0 wst sender orders rings mining
+    func_submitRings (order_hash := order_hash) (ring_hash := ring_hash)
+                     wst0 wst sender orders rings mining
   end.
