@@ -741,6 +741,32 @@ Section Func_submitRings.
 
   End UpdateMinerAndInterceptor.
 
+
+  Context `{verify_miner_signature: address -> bytes32 -> bytes -> bool}.
+
+  Section CheckMinerSignature.
+
+    Definition check_miner_signature
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
+    : WorldState * RingSubmitterRuntimeState * list Event :=
+      let mining := submitter_rt_mining st in
+      let static_mining := mining_rt_static mining in
+      let miner := mining_miner static_mining in
+      let sig := mining_sig static_mining in
+      match sig with
+      | nil => if Nat.eqb sender miner then
+                (wst, st, nil)
+              else
+                (wst0, st, EvtRevert :: nil)
+      | _ => if verify_miner_signature miner (mining_rt_hash mining) sig then
+              (wst, st, nil)
+            else
+              (wst0, st, EvtRevert :: nil)
+      end.
+
+  End CheckMinerSignature.
+
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> address -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -774,7 +800,8 @@ Section Func_submitRings.
            check_orders ;;
            update_rings_hash ;;
            update_mining_hash ;;
-           update_miner_interceptor) wst0 wst sender st
+           update_miner_interceptor ;;
+           check_miner_signature) wst0 wst sender st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
@@ -802,6 +829,7 @@ Parameter mining_hash_dec: forall (m m': Mining) (rings: list RingRuntimeState),
      mining_hash m rings = mining_hash m' rings) /\
     (get_mining_hash_preimg m rings <> get_mining_hash_preimg m' rings ->
      mining_hash m rings <> mining_hash m' rings).
+Parameter verify_miner_signature: address -> bytes32 -> bytes -> bool.
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
@@ -811,5 +839,6 @@ Definition RingSubmitter_step
     func_submitRings (order_hash := order_hash)
                      (ring_hash := ring_hash)
                      (mining_hash := mining_hash)
+                     (verify_miner_signature := verify_miner_signature)
                      wst0 wst sender orders rings mining
   end.
