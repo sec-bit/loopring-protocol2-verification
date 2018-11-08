@@ -742,7 +742,7 @@ Section Func_submitRings.
   End UpdateMinerAndInterceptor.
 
 
-  Context `{verify_miner_signature: address -> bytes32 -> bytes -> bool}.
+  Context `{verify_signature: address -> bytes32 -> bytes -> bool}.
 
   Section CheckMinerSignature.
 
@@ -758,13 +758,48 @@ Section Func_submitRings.
                 (wst, st, nil)
               else
                 (wst0, st, EvtRevert :: nil)
-      | _ => if verify_miner_signature miner (mining_rt_hash mining) sig then
+      | _ => if verify_signature miner (mining_rt_hash mining) sig then
               (wst, st, nil)
             else
               (wst0, st, EvtRevert :: nil)
       end.
 
   End CheckMinerSignature.
+
+
+  Section CheckOrdersDualSig.
+
+    Fixpoint __check_orders_dualsig
+             (orders: list OrderRuntimeState) (mining_hash: bytes32)
+    : list OrderRuntimeState :=
+      match orders with
+      | nil => nil
+      | order :: orders' =>
+        let static_order := ord_rt_order order in
+        let order' :=
+            match order_dualAuthSig static_order with
+            | nil => order
+            | _ => if verify_signature (order_dualAuthAddr static_order)
+                                      mining_hash
+                                      (order_dualAuthSig static_order)
+                  then
+                    order
+                  else
+                    upd_order_valid order false
+            end
+        in order' :: __check_orders_dualsig orders' mining_hash
+      end.
+
+    Definition check_orders_dualsig
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
+      : WorldState * RingSubmitterRuntimeState * list Event :=
+      let orders := submitter_rt_orders st in
+      let mining_hash := mining_rt_hash (submitter_rt_mining st) in
+      (wst,
+       submitter_update_orders st (__check_orders_dualsig orders mining_hash),
+       nil).
+
+  End CheckOrdersDualSig.
 
 
   Definition submitter_seq
@@ -801,7 +836,8 @@ Section Func_submitRings.
            update_rings_hash ;;
            update_mining_hash ;;
            update_miner_interceptor ;;
-           check_miner_signature) wst0 wst sender st
+           check_miner_signature ;;
+           check_orders_dualsig) wst0 wst sender st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
@@ -829,7 +865,7 @@ Parameter mining_hash_dec: forall (m m': Mining) (rings: list RingRuntimeState),
      mining_hash m rings = mining_hash m' rings) /\
     (get_mining_hash_preimg m rings <> get_mining_hash_preimg m' rings ->
      mining_hash m rings <> mining_hash m' rings).
-Parameter verify_miner_signature: address -> bytes32 -> bytes -> bool.
+Parameter verify_signature: address -> bytes32 -> bytes -> bool.
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
@@ -839,6 +875,6 @@ Definition RingSubmitter_step
     func_submitRings (order_hash := order_hash)
                      (ring_hash := ring_hash)
                      (mining_hash := mining_hash)
-                     (verify_miner_signature := verify_miner_signature)
+                     (verify_signature := verify_signature)
                      wst0 wst sender orders rings mining
   end.
