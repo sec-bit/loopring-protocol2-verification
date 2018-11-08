@@ -426,7 +426,7 @@ Section Func_submitRings.
       end.
 
     Definition update_orders_hash
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
       : (WorldState * RingSubmitterRuntimeState * list Event) :=
       (wst,
        submitter_update_orders st (__update_orders_hash (submitter_rt_orders st)),
@@ -493,7 +493,7 @@ Section Func_submitRings.
       end.
 
     Definition update_orders_broker_interceptor
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
       : (WorldState * RingSubmitterRuntimeState * list Event) :=
       match __update_orders_broker_interceptor wst0 wst (submitter_rt_orders st) with
       | (wst', orders', evts') =>
@@ -548,7 +548,7 @@ Section Func_submitRings.
       end.
 
     Definition get_filled_and_check_cancelled
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
       : (WorldState * RingSubmitterRuntimeState * list Event) :=
       let params := build_order_params (submitter_rt_orders st) in
       match TradeDelegate_step
@@ -587,7 +587,7 @@ Section Func_submitRings.
       end.
 
     Definition update_broker_spendables
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
     : (WorldState * RingSubmitterRuntimeState * list Event) :=
       (wst,
        submitter_update_orders st (__update_orders_spendables (submitter_rt_orders st)),
@@ -631,7 +631,7 @@ Section Func_submitRings.
       end.
 
     Definition check_orders
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
     : (WorldState * RingSubmitterRuntimeState * list Event) :=
       let orders' := __check_orders (submitter_rt_orders st)
                                     (block_timestamp (wst_block_state wst)) in
@@ -681,7 +681,7 @@ Section Func_submitRings.
       end.
 
     Definition update_rings_hash
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
       : WorldState * RingSubmitterRuntimeState * (list Event) :=
       (wst,
        submitter_update_rings
@@ -713,7 +713,7 @@ Section Func_submitRings.
   Section UpdateMiningHash.
 
     Definition update_mining_hash
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
     : WorldState * RingSubmitterRuntimeState * list Event :=
       let mining := submitter_rt_mining st in
       let rings := submitter_rt_rings st in
@@ -728,7 +728,7 @@ Section Func_submitRings.
   Section UpdateMinerAndInterceptor.
 
     Definition update_miner_interceptor
-               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+               (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState)
     : WorldState * RingSubmitterRuntimeState * list Event :=
       let mining := submitter_rt_mining st in
       let static_mining := mining_rt_static mining in
@@ -742,15 +742,15 @@ Section Func_submitRings.
   End UpdateMinerAndInterceptor.
 
   Definition submitter_seq
-             (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
+             (f0 f1: WorldState -> WorldState -> address -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
-    fun (wst0 wst: WorldState) (st: RingSubmitterRuntimeState) =>
-      match f0 wst0 wst st with
+    fun (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) =>
+      match f0 wst0 wst sender st with
       | (wst', st', evts') =>
         if has_revert_event evts' then
           (wst0, st, EvtRevert :: nil)
         else
-          match f1 wst0 wst' st' with
+          match f1 wst0 wst' sender st' with
           | (wst'', st'', evts'') =>
             if has_revert_event evts'' then
               (wst0, st, EvtRevert :: nil)
@@ -774,7 +774,7 @@ Section Func_submitRings.
            check_orders ;;
            update_rings_hash ;;
            update_mining_hash ;;
-           update_miner_interceptor) wst0 wst st
+           update_miner_interceptor) wst0 wst sender st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
