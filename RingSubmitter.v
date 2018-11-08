@@ -338,6 +338,24 @@ Section DataTypes.
       ring_rt_valid          := valid;
     |}.
 
+  Definition upd_mining_hash
+             (m: MiningRuntimeState) (hash: bytes32)
+    : MiningRuntimeState :=
+    {|
+      mining_rt_static      := mining_rt_static m;
+      mining_rt_hash        := hash;
+      mining_rt_interceptor := mining_rt_interceptor m;
+    |}.
+
+  Definition upd_mining_interceptor
+             (m: MiningRuntimeState) (interceptor: address)
+    : MiningRuntimeState :=
+    {|
+      mining_rt_static      := mining_rt_static m;
+      mining_rt_hash        := mining_rt_hash m;
+      mining_rt_interceptor := interceptor;
+    |}.
+
 End DataTypes.
 
 
@@ -658,6 +676,40 @@ Section Func_submitRings.
   End UpdateRingsHash.
 
 
+  Context `{mining_hash: Mining -> list RingRuntimeState -> bytes32}.
+
+  Fixpoint xor_rings_hash (rings: list RingRuntimeState) : bytes32 :=
+    match rings with
+    | nil => 0
+    | r :: rings' => Nat.lxor (ring_rt_hash r) (xor_rings_hash rings')
+    end.
+
+  Definition get_mining_hash_preimg
+             (mining: Mining) (rings: list RingRuntimeState) :=
+    (mining_miner mining, mining_feeRecipient mining, xor_rings_hash (rings)).
+
+  Context `{mining_hash_dec: forall (m m': Mining) (rings: list RingRuntimeState),
+               (get_mining_hash_preimg m rings = get_mining_hash_preimg m' rings ->
+                mining_hash m rings = mining_hash m' rings) /\
+               (get_mining_hash_preimg m rings <> get_mining_hash_preimg m' rings ->
+                mining_hash m rings <> mining_hash m' rings)}.
+
+
+  Section UpdateMiningHash.
+
+    Definition update_mining_hash
+               (wst0 wst: WorldState) (st: RingSubmitterRuntimeState)
+    : WorldState * RingSubmitterRuntimeState * list Event :=
+      let mining := submitter_rt_mining st in
+      let rings := submitter_rt_rings st in
+      (wst,
+       submitter_update_mining
+         st (upd_mining_hash mining (mining_hash (mining_rt_static mining) rings)),
+       nil).
+
+  End UpdateMiningHash.
+
+
   Definition submitter_seq
              (f0 f1: WorldState -> WorldState -> RingSubmitterRuntimeState ->
                      WorldState * RingSubmitterRuntimeState * list Event) :=
@@ -689,7 +741,8 @@ Section Func_submitRings.
            get_filled_and_check_cancelled ;;
            update_broker_spendables ;;
            check_orders ;;
-           update_rings_hash) wst0 wst st
+           update_rings_hash ;;
+           update_mining_hash) wst0 wst st
     with
     | (wst', st', evts') =>
       if has_revert_event evts' then
@@ -711,12 +764,20 @@ Parameter ring_hash_dec: forall (r r': RingRuntimeState) (orders: list OrderRunt
      ring_hash r orders = ring_hash r' orders) /\
     (get_ring_hash_preimg r orders <> get_ring_hash_preimg r' orders ->
      ring_hash r orders <> ring_hash r' orders).
+Parameter mining_hash: Mining -> list RingRuntimeState -> bytes32.
+Parameter mining_hash_dec: forall (m m': Mining) (rings: list RingRuntimeState),
+    (get_mining_hash_preimg m rings = get_mining_hash_preimg m' rings ->
+     mining_hash m rings = mining_hash m' rings) /\
+    (get_mining_hash_preimg m rings <> get_mining_hash_preimg m' rings ->
+     mining_hash m rings <> mining_hash m' rings).
 
 Definition RingSubmitter_step
            (wst0 wst: WorldState) (msg: RingSubmitterMsg)
   : (WorldState * RetVal * list Event) :=
   match msg with
   | msg_submitRings sender orders rings mining =>
-    func_submitRings (order_hash := order_hash) (ring_hash := ring_hash)
+    func_submitRings (order_hash := order_hash)
+                     (ring_hash := ring_hash)
+                     (mining_hash := mining_hash)
                      wst0 wst sender orders rings mining
   end.
