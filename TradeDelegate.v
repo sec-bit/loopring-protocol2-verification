@@ -15,383 +15,486 @@ Require Import
 Open Scope list_scope.
 
 
-Section Aux.
+Module TradeDelegate.
 
-  Definition is_authorized_address (st: TradeDelegateState) (addr: address) : bool :=
-    match (in_dec (Nat.eq_dec) addr (delegate_authorizedAddresses st)) with
-    | left _ => true
-    | right _ => false
-    end.
+  Section Aux.
 
-  Definition is_owner (st: TradeDelegateState) (addr: address) : bool :=
-    Nat.eqb (delegate_owner st) addr.
+    Definition is_authorized_address
+               (st: TradeDelegateState) (addr: address) : Prop :=
+      In addr (delegate_authorizedAddresses st).
 
-  Definition is_suspended (st: TradeDelegateState) : bool :=
-    delegate_suspended st.
+    Definition is_owner (st: TradeDelegateState) (addr: address) : Prop :=
+      addr = delegate_owner st.
 
-  Definition authorized_and_nonsuspended
-             (st: TradeDelegateState) (sender: address) : bool :=
-    andb (is_authorized_address st sender) (negb (is_suspended st)).
+    Definition is_not_suspended (st: TradeDelegateState) : Prop :=
+      delegate_suspended st = false.
 
-End Aux.
+    Definition authorized_and_nonsuspended
+               (st: TradeDelegateState) (sender: address) : Prop :=
+      is_authorized_address st sender /\ is_not_suspended st.
 
+  End Aux.
 
-Section Func_authorizeAddress.
+  Section AuthorizeAddress.
 
-  Definition authorizeAddress_sat_requirements
-             (wst: WorldState) (sender addr: address) :=
-    let st := wst_trade_delegate_state wst in
-    andb (is_owner st sender)
-         (andb (negb (Nat.eqb addr 0))
-               (negb (is_authorized_address st addr))).
+    Definition authorizeAddress_spec (sender addr: address) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            is_owner st sender /\ addr <> 0 /\ ~ is_authorized_address st sender;
 
-  Definition func_authorizeAddress
-             (wst0 wst: WorldState) (sender addr: address)
-    : (WorldState * RetVal * list Event) :=
-    if authorizeAddress_sat_requirements wst sender addr then
-      (
-        let st := wst_trade_delegate_state wst in
-        wst_update_trade_delegate
-          wst
-          {|
-            delegate_owner := delegate_owner st;
-            delegate_suspended := delegate_suspended st;
-            delegate_authorizedAddresses := addr :: delegate_authorizedAddresses st;
-            delegate_filled := delegate_filled st;
-            delegate_cancelled := delegate_cancelled st;
-            delegate_cutoffs := delegate_cutoffs st;
-            delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-            delegate_cutoffsOwner := delegate_cutoffsOwner st;
-            delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-          |},
-        RetNone,
-        EvtAddressAuthorized addr :: nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := addr :: delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
 
-End Func_authorizeAddress.
+        fspec_events :=
+          fun wst events =>
+            events = EvtAddressAuthorized addr :: nil;
+      |}.
 
+  End AuthorizeAddress.
 
-Section Func_deauthorizeAddress.
+  Section DeauthorizeAddress.
 
-  Definition func_deauthorizeAddress
-             (wst0 wst: WorldState) (sender addr: address)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst0, RetNone, nil).
+    Definition deauthorizeAddress_spec (sender addr: address) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
 
-End Func_deauthorizeAddress.
+        fspec_trans :=
+          fun wst wst' retval => True;
 
+        fspec_events :=
+          fun wst events => True;
+      |}.
 
-Section Func_isAddressAuthorized.
+  End DeauthorizeAddress.
 
-  Definition func_isAddressAuthorized
-             (wst0 wst: WorldState) (sender addr: address)
-  : (WorldState * RetVal * list Event):=
-    (wst,
-     RetBool (is_authorized_address (wst_trade_delegate_state wst) addr),
-     nil
-    ).
+  Section IsAddressAuthorized.
 
-End Func_isAddressAuthorized.
+    Definition isAddressAuthorized_spec (sender addr: address) :=
+      {|
+        fspec_require :=
+          fun wst => True;
 
+        fspec_trans :=
+          fun wst wst' retval =>
+            wst' = wst /\
+            let st := wst_trade_delegate_state wst in
+            (is_authorized_address st addr -> retval = RetBool true) /\
+            (~ is_authorized_address st addr -> retval = RetBool false);
 
-Section Func_batchTransfer.
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
 
-  Fixpoint func_batchTransfer
-           (wst0 wst: WorldState) (sender: address) (params: list TransferParam)
-  : (WorldState * RetVal * list Event) :=
-    if authorized_and_nonsuspended (wst_trade_delegate_state wst) sender then
+  End IsAddressAuthorized.
+
+  Section BatchTransfer.
+
+    Inductive transfer_params
+              (wst: WorldState) (sender: address) (params: list TransferParam)
+              : WorldState -> list Event -> Prop :=
+    | transfer_nil:
+        params = nil ->
+        transfer_params wst sender params wst nil
+
+    | transfer_cons:
+        forall param params' retval wst' events' wst'' events'',
+          params = param :: params' ->
+          ERC20s.model wst
+                       (msg_transferFrom (wst_trade_delegate_addr wst)
+                                         (transfer_token param)
+                                         (transfer_from param)
+                                         (transfer_to param)
+                                         (transfer_amount param))
+                       wst' retval events' ->
+          transfer_params wst' sender params' wst'' events'' ->
+          transfer_params wst sender params wst'' (events' ++ events'')
+    .
+
+    Definition batchTransfer_spec (sender: address) (params: list TransferParam) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            authorized_and_nonsuspended (wst_trade_delegate_state wst) sender /\
+            (exists wst' events, transfer_params wst sender params wst' events)
+        ;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            retval = RetNone /\
+            forall wst'' events,
+              transfer_params wst sender params wst'' events ->
+              wst' = wst'
+        ;
+
+        fspec_events :=
+          fun wst events =>
+            forall wst' events',
+              transfer_params wst sender params wst' events' ->
+              events = events'
+        ;
+      |}.
+
+  End BatchTransfer.
+
+  Section BatchUpdateFilled.
+
+    Definition batchUpdateFilled_spec (sender: address) (params: list FilledParam) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
+
+        fspec_trans :=
+          fun wst wst' retval => True;
+
+        fspec_events :=
+          fun wst events => True;
+      |}.
+
+  End BatchUpdateFilled.
+
+  Section SetCancelled.
+
+    Definition setCancelled_spec (sender broker: address) (orderHash: bytes32) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            authorized_and_nonsuspended (wst_trade_delegate_state wst) sender;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := AH2B.upd (delegate_cancelled st) (broker, orderHash) true;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
+
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
+
+  End SetCancelled.
+
+  Section SetCutOffs.
+
+    Definition setCutoffs_spec (sender broker: address) (cutoff: uint) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            authorized_and_nonsuspended st sender /\
+            A2V.get (delegate_cutoffs st) (broker) < cutoff;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff; (*TODO check this line*)
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
+
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
+
+  End SetCutOffs.
+
+  Section SetTradingPairCutOffs.
+
+    Definition setTradingPairCutoffs_spec
+               (sender broker: address) (tokenPair: bytes20) (cutoff: uint) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            authorized_and_nonsuspended st sender /\
+            AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair) < cutoff;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
+
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+       |}.
+
+  End SetTradingPairCutOffs.
+
+  Section SetCutoffsOfOwner.
+
+    Definition setCutoffsOfOwner_spec
+               (sender broker owner: address) (cutoff: uint) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            authorized_and_nonsuspended st sender /\
+            AA2V.get (delegate_cutoffsOwner st) (broker, owner) < cutoff;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff; (*TODO check this line*)
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
+
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
+
+  End SetCutoffsOfOwner.
+
+  Section SetTradingPairCutoffsOfOwner.
+
+    Definition setTradingPairCutoffsOfOwner_spec
+               (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            authorized_and_nonsuspended st sender /\
+            AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) < cutoff;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff; (*TODO check this line*)
+                     |} /\
+            retval = RetNone;
+
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
+
+  End SetTradingPairCutoffsOfOwner.
+
+  Section BatchGetFilledAndCheckCancelled.
+
+    Definition is_not_cancelled
+               (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
+    : bool :=
+      (* TODO: to be defined *)
+      false.
+
+    Fixpoint build_fills
+             (st: TradeDelegateState) (params: list OrderParam)
+      : list (option uint) :=
       match params with
-      | nil => (wst, RetNone, nil)
+      | nil => nil
       | param :: params' =>
-        match ERC20_step wst0 wst
-                         (msg_transferFrom (wst_trade_delegate_addr wst)
-                                           (transfer_token param)
-                                           (transfer_from param)
-                                           (transfer_to param)
-                                           (transfer_amount param))
-        with
-        | (wst', ret', evts') =>
-          if has_revert_event evts' then
-            (wst0, RetNone, EvtRevert :: nil)
-          else
-            match func_batchTransfer wst0 wst' sender params' with
-            | (wst'', ret'', evts'') =>
-              if has_revert_event evts'' then
-                (wst0, RetNone, EvtRevert :: nil)
-              else
-                (wst'', ret'', evts' ++ evts'')
-            end
-        end
-      end
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+        let fill :=
+            if is_not_cancelled
+                 st (order_param_broker param) (order_param_hash param) (order_param_tradingPair param)
+            then
+              Some (H2V.get (delegate_filled st) (order_param_hash param))
+            else
+              None
+        in
+        fill :: build_fills st params'
+      end.
 
-End Func_batchTransfer.
+    Definition batchGetFilledAndCheckCancelled_spec
+               (sender: address) (params: list OrderParam) :=
+      {|
+        fspec_require :=
+          fun wst => True;
 
+        fspec_trans :=
+          fun wst wst' retval =>
+            wst' = wst /\
+            retval = RetFills (build_fills (wst_trade_delegate_state wst) params);
 
-Section Func_batchUpdateFilled.
+        fspec_events :=
+          fun wst events =>
+            events = nil;
+      |}.
 
-  Definition func_batchUpdateFilled
-             (wst0 wst: WorldState) (sender: address) (params: list FilledParam)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst0, RetNone, nil).
+  End BatchGetFilledAndCheckCancelled.
 
-End Func_batchUpdateFilled.
+  Section Suspend.
 
+    Definition suspend_spec (sender: address) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
 
-Section Func_setCancelled.
+        fspec_trans :=
+          fun wst wst' retval => True;
 
-  Definition func_setCancelled
-             (wst0 wst: WorldState) (sender broker: address) (orderHash: bytes32)
-  : (WorldState * RetVal * list Event) :=
-    if authorized_and_nonsuspended (wst_trade_delegate_state wst) sender then
-      let st := wst_trade_delegate_state wst in
-      (wst_update_trade_delegate
-         wst
-         {|
-           delegate_owner := delegate_owner st;
-           delegate_suspended := delegate_suspended st;
-           delegate_authorizedAddresses := delegate_authorizedAddresses st;
-           delegate_filled := delegate_filled st;
-           delegate_cancelled := AH2B.upd (delegate_cancelled st) (broker, orderHash) true;
-           delegate_cutoffs := delegate_cutoffs st;
-           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-           delegate_cutoffsOwner := delegate_cutoffsOwner st;
-           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-         |},
-       RetNone,
-       nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+        fspec_events :=
+          fun wst events => True;
+      |}.
 
-End Func_setCancelled.
+  End Suspend.
 
+  Section Resume.
 
-Section Func_setCutoffs.
+    Definition resume_spec (sender: address) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
 
-  Definition func_setCutoffs
-             (wst0 wst: WorldState) (sender broker: address) (cutoff: uint)
-  : (WorldState * RetVal * list Event) :=
-    let st := wst_trade_delegate_state wst in
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-            (Nat.ltb (A2V.get (delegate_cutoffs st) (broker)) cutoff) then
-      (wst_update_trade_delegate
-         wst
-         {|
-           delegate_owner := delegate_owner st;
-           delegate_suspended := delegate_suspended st;
-           delegate_authorizedAddresses := delegate_authorizedAddresses st;
-           delegate_filled := delegate_filled st;
-           delegate_cancelled := delegate_cancelled st;
-           delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff; (*TODO check this line*)
-           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-           delegate_cutoffsOwner := delegate_cutoffsOwner st;
-           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-         |},
-       RetNone,
-       nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+        fspec_trans :=
+          fun wst wst' retval => True;
 
-End Func_setCutoffs.
+        fspec_events :=
+          fun wst events => True;
+      |}.
 
+  End Resume.
 
-Section Func_setTradingPairCutoffs.
+  Section Kill.
 
-  Definition func_setTradingPairCutoffs
-             (wst0 wst: WorldState) (sender broker: address) (tokenPair: bytes20) (cutoff: uint)
-  : (WorldState * RetVal * list Event) :=
-    let st := wst_trade_delegate_state wst in
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-            (Nat.ltb (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)) cutoff) then
-      (wst_update_trade_delegate
-         wst
-         {|
-           delegate_owner := delegate_owner st;
-           delegate_suspended := delegate_suspended st;
-           delegate_authorizedAddresses := delegate_authorizedAddresses st;
-           delegate_filled := delegate_filled st;
-           delegate_cancelled := delegate_cancelled st;
-           delegate_cutoffs := delegate_cutoffs st;
-           delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
-           delegate_cutoffsOwner := delegate_cutoffsOwner st;
-           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-         |},
-       RetNone,
-       nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+    Definition kill_spec (sender: address) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
 
-End Func_setTradingPairCutoffs.
+        fspec_trans :=
+          fun wst wst' retval => True;
 
+        fspec_events :=
+          fun wst events => True;
+      |}.
 
-Section Func_setCutoffsOfOwner.
+  End Kill.
 
-  Definition func_setCutoffsOfOwner
-             (wst0 wst: WorldState) (sender broker owner: address) (cutoff: uint)
-  : (WorldState * RetVal * list Event) :=
-    let st := wst_trade_delegate_state wst in
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-            (Nat.ltb (AA2V.get (delegate_cutoffsOwner st) (broker, owner)) cutoff) then
-      (wst_update_trade_delegate
-         wst
-         {|
-           delegate_owner := delegate_owner st;
-           delegate_suspended := delegate_suspended st;
-           delegate_authorizedAddresses := delegate_authorizedAddresses st;
-           delegate_filled := delegate_filled st;
-           delegate_cancelled := delegate_cancelled st;
-           delegate_cutoffs := delegate_cutoffs st;
-           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-           delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff; (*TODO check this line*)
-           delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-         |},
-       RetNone,
-       nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+  Definition get_spec (msg: TradeDelegateMsg) : FSpec :=
+    match msg with
+    | msg_authorizeAddress sender addr =>
+      authorizeAddress_spec sender addr
 
-End Func_setCutoffsOfOwner.
+    | msg_deauthorizeAddress sender addr =>
+      deauthorizeAddress_spec sender addr
 
+    | msg_isAddressAuthorized sender addr =>
+      isAddressAuthorized_spec sender addr
 
-Section Func_setTradingPairCutoffsOfOwner.
+    | msg_batchTransfer sender params =>
+      batchTransfer_spec sender params
 
-  Definition func_setTradingPairCutoffsOfOwner
-             (wst0 wst: WorldState)
-             (sender broker owner: address) (tokenPair: bytes20) (cutoff: uint)
-  : (WorldState * RetVal * list Event) :=
-    let st := wst_trade_delegate_state wst in
-    if andb (authorized_and_nonsuspended (wst_trade_delegate_state wst) sender)
-            (Nat.ltb (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)) cutoff) then
-      (wst_update_trade_delegate
-         wst
-         {|
-           delegate_owner := delegate_owner st;
-           delegate_suspended := delegate_suspended st;
-           delegate_authorizedAddresses := delegate_authorizedAddresses st;
-           delegate_filled := delegate_filled st;
-           delegate_cancelled := delegate_cancelled st;
-           delegate_cutoffs := delegate_cutoffs st;
-           delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-           delegate_cutoffsOwner := delegate_cutoffsOwner st;
-           delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff; (*TODO check this line*)
-         |},
-       RetNone,
-       nil
-      )
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+    | msg_batchUpdateFilled sender params =>
+      batchUpdateFilled_spec sender params
 
-End Func_setTradingPairCutoffsOfOwner.
+    | msg_setCancelled sender broker orderHash =>
+      setCancelled_spec sender broker orderHash
 
+    | msg_setCutoffs sender broker cutoff =>
+      setCutoffs_spec sender broker cutoff
 
-Section Func_batchGetFilledAndCheckCancelled.
+    | msg_setTradingPairCutoffs sender broker tokenPair cutoff =>
+      setTradingPairCutoffs_spec sender broker tokenPair cutoff
 
-  Definition is_not_cancelled
-             (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
-  : bool :=
-    (* TODO: to be defined *)
-    false.
+    | msg_setCutoffsOfOwner sender broker owner cutoff =>
+      setCutoffsOfOwner_spec sender broker owner cutoff
 
-  Fixpoint build_fills
-           (st: TradeDelegateState) (params: list OrderParam)
-    : list (option uint) :=
-    match params with
-    | nil => nil
-    | param :: params' =>
-      let fill :=
-          if is_not_cancelled
-               st (order_param_broker param) (order_param_hash param) (order_param_tradingPair param)
-          then
-            Some (H2V.get (delegate_filled st) (order_param_hash param))
-          else
-            None
-      in
-      fill :: build_fills st params'
+    | msg_setTradingPairCutoffsOfOwner sender broker owner tokenPair cutoff =>
+      setTradingPairCutoffsOfOwner_spec sender broker owner tokenPair cutoff
+
+    | msg_batchGetFilledAndCheckCancelled sender params =>
+      batchGetFilledAndCheckCancelled_spec sender params
+
+    | msg_suspend sender =>
+      suspend_spec sender
+
+    | msg_resume sender =>
+      resume_spec sender
+
+    | msg_kill sender =>
+      kill_spec sender
     end.
 
-  Definition func_batchGetFilledAndCheckCancelled
-             (wst0 wst: WorldState) (sender: address) (params: list OrderParam)
-    : (WorldState * RetVal * list Event) :=
-    (wst,
-     RetFills (build_fills (wst_trade_delegate_state wst) params),
-     nil
-    ).
+    Definition model
+               (wst: WorldState)
+               (msg: TradeDelegateMsg)
+               (wst': WorldState)
+               (retval: RetVal)
+               (events: list Event)
+      : Prop :=
+      fspec_sat (get_spec msg) wst wst' retval events.
 
-End Func_batchGetFilledAndCheckCancelled.
-
-
-Section Func_suspend.
-
-  Definition func_suspend
-             (wst0 wst: WorldState) (sender: address)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst0, RetNone, nil).
-
-End Func_suspend.
-
-
-Section Func_resume.
-
-  Definition func_resume
-             (wst0 wst: WorldState) (sender: address)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst0, RetNone, nil).
-
-End Func_resume.
-
-
-Section Func_kill.
-
-  Definition func_kill
-             (wst0 wst: WorldState) (sender: address)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst0, RetNone, nil).
-
-End Func_kill.
-
-
-Definition TradeDelegate_step
-           (wst0 wst: WorldState) (msg: TradeDelegateMsg)
-  : (WorldState * RetVal * list Event) :=
-  match msg with
-  | msg_authorizeAddress sender addr =>
-    func_authorizeAddress wst0 wst sender addr
-  | msg_deauthorizeAddress sender addr =>
-    func_deauthorizeAddress wst0 wst sender addr
-  | msg_isAddressAuthorized sender addr =>
-    func_isAddressAuthorized wst0 wst sender addr
-  | msg_batchTransfer sender params =>
-    func_batchTransfer wst0 wst sender params
-  | msg_batchUpdateFilled sender params =>
-    func_batchUpdateFilled wst0 wst sender params
-  | msg_setCancelled sender broker orderHash =>
-    func_setCancelled wst0 wst sender broker orderHash
-  | msg_setCutoffs sender broker cutoff =>
-    func_setCutoffs wst0 wst sender broker cutoff
-  | msg_setTradingPairCutoffs sender broker tokenPair cutoff =>
-    func_setTradingPairCutoffs wst0 wst sender broker tokenPair cutoff
-  | msg_setCutoffsOfOwner sender broker owner cutoff =>
-    func_setCutoffsOfOwner wst0 wst sender broker owner cutoff
-  | msg_setTradingPairCutoffsOfOwner sender broker owner tokenPair cutoff =>
-    func_setTradingPairCutoffsOfOwner wst0 wst sender broker owner tokenPair cutoff
-  | msg_batchGetFilledAndCheckCancelled sender params =>
-    func_batchGetFilledAndCheckCancelled wst0 wst sender params
-  | msg_suspend sender =>
-    func_suspend wst0 wst sender
-  | msg_resume sender =>
-    func_resume wst0 wst sender
-  | msg_kill sender =>
-    func_kill wst0 wst sender
-  end.
+End TradeDelegate.
