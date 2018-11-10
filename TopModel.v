@@ -20,45 +20,48 @@ Require Import
 Parameter wst_init: WorldState.
 
 Definition lr_step
-           (wst0 wst: WorldState) (msg: Message)
-  : (WorldState * RetVal * list Event) :=
+           (wst: WorldState) (msg: Message)
+           (wst': WorldState) (retval: RetVal) (events: list Event) : Prop :=
   match msg with
   | MsgRingSubmitter msg' =>
-    RingSubmitter_step wst0 wst msg'
+    RingSubmitter.model wst msg' wst' retval events
+
   | MsgRingCanceller msg' =>
-    RingCanceller_step wst0 wst msg'
+    RingCanceller.model wst msg' wst' retval events
+
   | MsgTradeDelegate msg' =>
-    TradeDelegate_step wst0 wst msg'
+    TradeDelegate.model wst msg' wst' retval events
+
   | MsgFeeHolder msg' =>
-    FeeHolder_step wst0 wst msg'
+    FeeHolder.model wst msg' wst' retval events
+
   | MsgERC20 msg' =>
-    ERC20_step wst0 wst msg'
+    ERC20s.model wst msg' wst' retval events
+
   | MsgBrokerRegistry msg' =>
-    BrokerRegistry_step wst0 wst msg'
+    BrokerRegistry.model wst msg' wst' retval events
+
   | MsgOrderRegistry msg' =>
-    OrderRegistry_step wst0 wst msg'
+    OrderRegistry.model wst msg' wst' retval events
   end.
 
-Fixpoint lr_steps (wst0 wst: WorldState) (msgs: list Message)
-  : (WorldState * RetVal * list Event) :=
-  match msgs with
-  | nil => (wst, RetNone, nil)
-  | msg :: msgs' =>
-    match lr_step wst0 wst msg with
-    | (wst', ret', evts') =>
-      if has_revert_event evts' then
-        (wst0, RetNone, EvtRevert :: nil)
-      else
-        match lr_steps wst0 wst' msgs' with
-        | (wst'', ret'', evts'') =>
-          if has_revert_event evts'' then
-            (wst0, RetNone, EvtRevert :: nil)
-          else
-            (wst'', ret'', evts' ++ evts'')
-        end
-    end
-  end.
+Inductive lr_steps (wst: WorldState) (msgs: list Message)
+  : WorldState -> RetVal -> list Event -> Prop :=
+| lr_steps_nil:
+    msgs = nil ->
+    lr_steps wst msgs wst RetNone nil
 
+| lr_steps_cons:
+    forall msg msgs' wst' retval' events' wst'' retval'' events'',
+      msgs = msg :: msgs' ->
+      lr_step wst msg wst' retval' events' ->
+      lr_steps wst' msgs' wst'' retval'' events'' ->
+      lr_steps wst msgs wst'' retval'' (events' ++ events'')
+.
 
-Definition lr_model (msgs: list Message) : (WorldState * RetVal * list Event) :=
-  lr_steps wst_init wst_init msgs.
+Definition lr_model
+           (msgs: list Message)
+           (wst': WorldState)
+           (retval: RetVal)
+           (events: list Event) : Prop :=
+  lr_steps wst_init msgs wst' retval events.
