@@ -15,77 +15,132 @@ Require Import
 Open Scope list_scope.
 
 
-Section Func_withdrawBurned.
+Module FeeHolder.
 
-  Definition withdrawBurned_requirements
-             (wst: WorldState) (sender token from: address) (value: uint)
-  : bool :=
-    andb (is_authorized_address (wst_trade_delegate_state wst) sender)
-         (Nat.leb value
-                  (AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
-                            (token, from))).
+  Section Aux.
 
-  Definition func_withdrawBurned
-             (wst0 wst: WorldState) (sender token: address) (value: uint)
-  : (WorldState * RetVal * list Event) :=
-    if withdrawBurned_requirements
-         wst sender token (wst_feeholder_addr wst) value then
-      match ERC20_step
-              wst0 wst (msg_transfer (wst_feeholder_addr wst) token sender value)
-      with
-      | (wst', ret', evts') =>
-        if has_revert_event evts' then
-          (wst0, RetNone, EvtRevert :: nil)
-        else
-          let from := (wst_feeholder_addr wst) in
-          (let st := wst_feeholder_state wst in
-           wst_update_feeholder
-             wst
-             {|
-               feeholder_delegateAddress := feeholder_delegateAddress st;
-               feeholder_feeBalances := AA2V_upd_dec (feeholder_feeBalances st)
-                                                     token from value;
-             |},
-           RetNone,
-           EvtTokenWithdrawn from token value :: nil
-          )
-      end
-    else
-      (wst0, RetNone, EvtRevert :: nil).
+    Definition wst_before_transfer
+               (wst: WorldState) (sender token: address) (value: uint)
+    : WorldState :=
+      let from := wst_feeholder_addr wst in
+      let st := wst_feeholder_state wst in
+      wst_update_feeholder
+        wst
+        {|
+          feeholder_delegateAddress := feeholder_delegateAddress st;
+          feeholder_feeBalances := AA2V_upd_dec (feeholder_feeBalances st)
+                                                token from value;
+        |}.
 
-End Func_withdrawBurned.
+    Definition transfer_withdraw
+               (wst: WorldState) (sender token: address) (value: uint)
+      : WorldState -> list Event -> Prop :=
+      fun wst' events =>
+        forall retval,
+          ERC20s.model wst
+                       (msg_transfer (wst_feeholder_addr wst) token sender value)
+                       wst' retval events.
 
+    Definition is_authorized (wst: WorldState) (sender: address) : Prop :=
+      exists wst' events retval,
+        TradeDelegate.model wst
+                            (msg_isAddressAuthorized (wst_feeholder_addr wst) sender)
+                            wst' retval events /\
+        retval = RetBool true.
 
-Section Func_withdrawToken.
+  End Aux.
 
-  Definition func_withdrawToken
-             (wst0 wst: WorldState) (sender token: address) (value: uint)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst, RetNone, nil).
+  Section WithdrawBurned.
 
-End Func_withdrawToken.
+    Definition withdrawBurned_spec
+               (sender token: address) (value: uint) :=
+      {|
+        fspec_require :=
+          fun wst =>
+            is_authorized wst sender /\
+            AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
+                     (token, (wst_feeholder_addr wst)) >= value /\
+            exists wst' events,
+              transfer_withdraw (wst_before_transfer wst sender token value)
+                                sender token value
+                                wst' events
+        ;
 
+        fspec_trans :=
+          fun wst wst' retval =>
+            retval = RetNone /\
+            forall wst'' events,
+              transfer_withdraw (wst_before_transfer wst sender token value)
+                                sender token value
+                                wst'' events ->
+              wst' = wst''
+        ;
 
-Section Func_batchAddFeeBalances.
+        fspec_events :=
+          fun wst events =>
+            forall wst' events',
+              transfer_withdraw (wst_before_transfer wst sender token value)
+                                sender token value
+                                wst' events' ->
+              events = events' ++ (EvtTokenWithdrawn (wst_feeholder_addr wst) token value :: nil)
+        ;
+      |}.
 
-  Definition func_batchAddFeeBalances
-             (wst0 wst: WorldState) (sender: address) (params: list FeeBalanceParam)
-  : (WorldState * RetVal * list Event) :=
-    (* TODO: to be defined *)
-    (wst, RetNone, nil).
+  End WithdrawBurned.
 
-End Func_batchAddFeeBalances.
+  Section WithdrawToken.
 
+    Definition withdrawToken_spec (sender token: address) (value: uint) :=
+      (* TODO: to be defined *)
+      {|
+        fspec_require :=
+          fun wst => True;
 
-Definition FeeHolder_step
-           (wst0 wst: WorldState) (msg: FeeHolderMsg)
-  : (WorldState * RetVal * list Event) :=
-  match msg with
-  | msg_withdrawBurned sender token value =>
-    func_withdrawBurned wst0 wst sender token value
-  | msg_withdrawToken sender token value =>
-    func_withdrawToken wst0 wst sender token value
-  | msg_batchAddFeeBalances sender params =>
-    func_batchAddFeeBalances wst0 wst sender params
-  end.
+        fspec_trans :=
+          fun wst wst' retval => True;
+
+        fspec_events :=
+          fun wst events => True;
+      |}.
+
+  End WithdrawToken.
+
+  Section BatchAddFeeBalances.
+
+    Definition batchAddFeeBalances_spec
+               (sender: address) (params: list FeeBalanceParam) :=
+      {|
+        fspec_require :=
+          fun wst => True;
+
+        fspec_trans :=
+          fun wst wst' retval => True;
+
+        fspec_events :=
+          fun wst events => True;
+      |}.
+
+  End BatchAddFeeBalances.
+
+  Definition get_spec (msg: FeeHolderMsg) : FSpec :=
+    match msg with
+    | msg_withdrawBurned sender token value =>
+      withdrawBurned_spec sender token value
+
+    | msg_withdrawToken sender token value =>
+      withdrawToken_spec sender token value
+
+    | msg_batchAddFeeBalances sender params =>
+      batchAddFeeBalances_spec sender params
+    end.
+
+    Definition model
+               (wst: WorldState)
+               (msg: FeeHolderMsg)
+               (wst': WorldState)
+               (retval: RetVal)
+               (events: list Event)
+      : Prop :=
+      fspec_sat (get_spec msg) wst wst' retval events.
+
+End FeeHolder.
