@@ -14,7 +14,7 @@ End RingSubmitter.
 Section RingCanceller.
 
   Inductive RingCancellerMsg : Type :=
-  | msg_cancelOrders (sender: address) (order_hashes: list bytes20)
+  | msg_cancelOrders (sender: address) (order_hashes: list bytes32)
   | msg_cancelAllOrdersForTradingPair (sender token1 token2: address) (cutoff: uint)
   | msg_cancelAllOrders (sender: address) (cutoff: uint)
   | msg_cancelAllOrdersForTradingPairOfOwner (sender owner token1 token2: address) (cutoff: uint)
