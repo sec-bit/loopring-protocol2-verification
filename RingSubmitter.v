@@ -13,16 +13,464 @@ Require Import
         OrderRegistry
         TradeDelegate.
 
-Open Scope list_scope.
-Open Scope bool_scope.
 
+Parameters get_order_hash: Order -> bytes32.
 
-Set Implicit Arguments.
-Unset Strict Implicit.
+Section HashAxioms.
+
+  Definition get_order_hash_preimg (order: Order) :=
+    (order_allOrNone order,
+     order_tokenBFeePercentage order,
+     order_tokenSFeePercentage order,
+     order_feePercentage order,
+     order_walletSplitPercentage order,
+     order_feeToken order,
+     order_tokenRecipient order,
+     order_wallet order,
+     order_orderInterceptor order,
+     order_broker order,
+     order_dualAuthAddr order,
+     order_tokenB order,
+     order_tokenS order,
+     order_owner order,
+     order_validUntil order,
+     order_validSince order,
+     order_feeAmount order,
+     order_amountB order,
+     order_amountS order).
+
+  Axiom order_hash_dec:
+    forall (ord ord': Order),
+      let preimg := get_order_hash_preimg ord in
+      let preimg' := get_order_hash_preimg ord' in
+      (preimg = preimg' -> get_order_hash ord = get_order_hash ord') /\
+      (preimg <> preimg' -> get_order_hash ord <> get_order_hash ord').
+
+End HashAxioms.
+
 
 Module RingSubmitter.
 
+  Section RunTimeState.
+
+    (* Order in Loopring contract is composed of two parts. One is the *)
+    (*      static data from submitter, while the other is dynamically *)
+    (*      generated and used only in LPSC. *)
+
+    (*      `Order` in Coq defines the static part. `OrderRuntimeState` *)
+    (*      combines it and the dynamic parts together. *)
+    (*    *)
+    Record OrderRuntimeState :=
+      mk_order_runtime_state {
+          ord_rt_order: Order;
+
+          ord_rt_p2p: bool;
+          ord_rt_hash: bytes32;
+          ord_rt_brokerInterceptor: address;
+          ord_rt_filledAmountS : uint;
+          ord_rt_initialFilledAmountS: uint;
+          ord_rt_valid: bool;
+        }.
+
+    (* Similarly for Mining. *)
+    Record MiningRuntimeState :=
+      mk_mining_runtime_state {
+          mining_rt_static: Mining;
+          mining_rt_hash: bytes32;
+          mining_rt_interceptor: address;
+        }.
+
+    Record Participation :=
+      mk_participation {
+          part_order_idx: nat; (* index in another order list *)
+          part_splitS: uint;
+          part_feeAmount: uint;
+          part_feeAmountS: uint;
+          part_feeAmountB: uint;
+          part_rebateFee: uint;
+          part_rebateS: uint;
+          part_rebateB: uint;
+          part_fillAmountS: uint;
+          part_fillAmountB: uint;
+        }.
+
+    Record RingRuntimeState :=
+      mk_ring_runtime_state {
+          ring_rt_static: Ring;
+          ring_rt_participations: list Participation;
+          ring_rt_hash: bytes32;
+          ring_rt_valid: bool;
+        }.
+
+    (* `RingSubmitterState` models the state of RingSubmitter state *)
+    (*      observable from the outside of contract. *)
+
+    (*      `RingSubmitterRuntimeState` also models the state (e.g., memory) *)
+    (*      that is only visible within the contract in its execution. *)
+    (*    *)
+    Record RingSubmitterRuntimeState :=
+      mk_ring_submitter_runtime_state {
+          submitter_rt_mining: MiningRuntimeState;
+          submitter_rt_orders: list OrderRuntimeState;
+          submitter_rt_rings: list RingRuntimeState;
+          (* TODO: add necessary fields of Context *)
+        }.
+
+
+    Definition make_rt_order (order: Order): OrderRuntimeState :=
+      {|
+        ord_rt_order := order;
+        ord_rt_p2p := false;
+        ord_rt_hash := 0;
+        ord_rt_brokerInterceptor := 0;
+        ord_rt_filledAmountS := 0;
+        ord_rt_initialFilledAmountS := 0;
+        ord_rt_valid := true;
+      |}.
+
+    Fixpoint make_rt_orders (orders: list Order): list OrderRuntimeState :=
+      match orders with
+      | nil => nil
+      | order :: orders => make_rt_order order :: make_rt_orders orders
+      end.
+
+    Definition make_rt_mining (mining: Mining): MiningRuntimeState :=
+      {|
+        mining_rt_static := mining;
+        mining_rt_hash := 0;
+        mining_rt_interceptor := 0;
+      |}.
+
+    Definition make_participation (ord_idx: nat): Participation :=
+      {|
+        part_order_idx := ord_idx;
+        part_splitS := 0;
+        part_feeAmount := 0;
+        part_feeAmountS := 0;
+        part_feeAmountB := 0;
+        part_rebateFee := 0;
+        part_rebateS := 0;
+        part_rebateB := 0;
+        part_fillAmountS := 0;
+        part_fillAmountB := 0;
+      |}.
+
+    Fixpoint make_participations (ord_indices: list nat): list Participation :=
+      match ord_indices with
+      | nil => nil
+      | idx :: indices' => make_participation idx :: make_participations indices'
+      end.
+
+    Definition make_rt_ring (ring: Ring): RingRuntimeState :=
+      {|
+        ring_rt_static := ring;
+        ring_rt_participations := make_participations (ring_orders ring);
+        ring_rt_hash := 0;
+        ring_rt_valid := true;
+      |}.
+
+    Fixpoint make_rt_rings (rings: list Ring): list RingRuntimeState :=
+      match rings with
+      | nil => nil
+      | ring :: rings => make_rt_ring ring :: make_rt_rings rings
+      end.
+
+    Definition make_rt_submitter_state
+               (mining: Mining) (orders: list Order) (rings: list Ring)
+      : RingSubmitterRuntimeState :=
+      {|
+        submitter_rt_mining := make_rt_mining mining;
+        submitter_rt_orders := make_rt_orders orders;
+        submitter_rt_rings := make_rt_rings rings;
+      |}.
+
+    Definition submitter_update_mining
+               (rsst: RingSubmitterRuntimeState) (st: MiningRuntimeState)
+      : RingSubmitterRuntimeState :=
+      {|
+        submitter_rt_mining := st;
+        submitter_rt_orders := submitter_rt_orders rsst;
+        submitter_rt_rings := submitter_rt_rings rsst;
+      |}.
+
+    Definition submitter_update_orders
+               (rsst: RingSubmitterRuntimeState) (sts: list OrderRuntimeState)
+      : RingSubmitterRuntimeState :=
+      {|
+        submitter_rt_mining := submitter_rt_mining rsst;
+        submitter_rt_orders := sts;
+        submitter_rt_rings := submitter_rt_rings rsst;
+      |}.
+
+    Definition submitter_update_rings
+               (rsst: RingSubmitterRuntimeState) (sts: list RingRuntimeState)
+      : RingSubmitterRuntimeState :=
+      {|
+        submitter_rt_mining := submitter_rt_mining rsst;
+        submitter_rt_orders := submitter_rt_orders rsst;
+        submitter_rt_rings := sts;
+      |}.
+
+    Definition upd_order_broker
+               (ord: OrderRuntimeState) (broker: address)
+      : OrderRuntimeState :=
+      let order := ord_rt_order ord in
+      {|
+        ord_rt_order :=
+          {|
+            order_version               := order_version               order;
+            order_owner                 := order_owner                 order;
+            order_tokenS                := order_tokenS                order;
+            order_tokenB                := order_tokenB                order;
+            order_amountS               := order_amountS               order;
+            order_amountB               := order_amountB               order;
+            order_validSince            := order_validSince            order;
+            order_tokenSpendableS       := order_tokenSpendableS       order;
+            order_tokenSpendableFee     := order_tokenSpendableFee     order;
+            order_dualAuthAddr          := order_dualAuthAddr          order;
+            order_broker                := broker;
+            order_brokerSpendableS      := order_brokerSpendableS      order;
+            order_brokerSpendableFee    := order_brokerSpendableFee    order;
+            order_orderInterceptor      := order_orderInterceptor      order;
+            order_wallet                := order_wallet                order;
+            order_validUntil            := order_validUntil            order;
+            order_sig                   := order_sig                   order;
+            order_dualAuthSig           := order_dualAuthSig           order;
+            order_allOrNone             := order_allOrNone             order;
+            order_feeToken              := order_feeToken              order;
+            order_feeAmount             := order_feeAmount             order;
+            order_feePercentage         := order_feePercentage         order;
+            order_waiveFeePercentage    := order_waiveFeePercentage    order;
+            order_tokenSFeePercentage   := order_tokenSFeePercentage   order;
+            order_tokenBFeePercentage   := order_tokenBFeePercentage   order;
+            order_tokenRecipient        := order_tokenRecipient        order;
+            order_walletSplitPercentage := order_walletSplitPercentage order;
+          |};
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition upd_order_interceptor
+               (ord: OrderRuntimeState) (interceptor: address)
+      : OrderRuntimeState :=
+      {|
+        ord_rt_order                := ord_rt_order ord;
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := interceptor;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition upd_order_valid
+               (ord: OrderRuntimeState) (valid: bool)
+      : OrderRuntimeState :=
+      {|
+        ord_rt_order                := ord_rt_order ord;
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := valid;
+      |}.
+
+    Definition upd_order_init_filled
+               (ord: OrderRuntimeState) (amount: uint)
+      : OrderRuntimeState :=
+      {|
+        ord_rt_order                := ord_rt_order ord;
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+        ord_rt_initialFilledAmountS := amount;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition upd_order_filled
+               (ord: OrderRuntimeState) (amount: uint)
+      : OrderRuntimeState :=
+      {|
+        ord_rt_order                := ord_rt_order ord;
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := amount;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition clear_order_broker_spendables
+               (ord: OrderRuntimeState)
+      : OrderRuntimeState :=
+      let order := ord_rt_order ord in
+      {|
+        ord_rt_order :=
+          {|
+            order_version               := order_version               order;
+            order_owner                 := order_owner                 order;
+            order_tokenS                := order_tokenS                order;
+            order_tokenB                := order_tokenB                order;
+            order_amountS               := order_amountS               order;
+            order_amountB               := order_amountB               order;
+            order_validSince            := order_validSince            order;
+            order_tokenSpendableS       := order_tokenSpendableS       order;
+            order_tokenSpendableFee     := order_tokenSpendableFee     order;
+            order_dualAuthAddr          := order_dualAuthAddr          order;
+            order_broker                := order_broker                order;
+            order_brokerSpendableS      := mk_spendable false 0 0;
+            order_brokerSpendableFee    := mk_spendable false 0 0;
+            order_orderInterceptor      := order_orderInterceptor      order;
+            order_wallet                := order_wallet                order;
+            order_validUntil            := order_validUntil            order;
+            order_sig                   := order_sig                   order;
+            order_dualAuthSig           := order_dualAuthSig           order;
+            order_allOrNone             := order_allOrNone             order;
+            order_feeToken              := order_feeToken              order;
+            order_feeAmount             := order_feeAmount             order;
+            order_feePercentage         := order_feePercentage         order;
+            order_waiveFeePercentage    := order_waiveFeePercentage    order;
+            order_tokenSFeePercentage   := order_tokenSFeePercentage   order;
+            order_tokenBFeePercentage   := order_tokenBFeePercentage   order;
+            order_tokenRecipient        := order_tokenRecipient        order;
+            order_walletSplitPercentage := order_walletSplitPercentage order;
+          |};
+        ord_rt_p2p                  := ord_rt_p2p ord;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition upd_ring_hash
+               (r: RingRuntimeState) (hash: bytes32)
+      : RingRuntimeState :=
+      {|
+        ring_rt_static         := ring_rt_static r;
+        ring_rt_participations := ring_rt_participations r;
+        ring_rt_hash           := hash;
+        ring_rt_valid          := ring_rt_valid r;
+      |}.
+
+    Definition upd_ring_valid
+               (r: RingRuntimeState) (valid: bool)
+      : RingRuntimeState :=
+      {|
+        ring_rt_static         := ring_rt_static r;
+        ring_rt_participations := ring_rt_participations r;
+        ring_rt_hash           := ring_rt_hash r;
+        ring_rt_valid          := valid;
+      |}.
+
+    Definition upd_mining_hash
+               (m: MiningRuntimeState) (hash: bytes32)
+      : MiningRuntimeState :=
+      {|
+        mining_rt_static      := mining_rt_static m;
+        mining_rt_hash        := hash;
+        mining_rt_interceptor := mining_rt_interceptor m;
+      |}.
+
+    Definition upd_mining_interceptor
+               (m: MiningRuntimeState) (interceptor: address)
+      : MiningRuntimeState :=
+      {|
+        mining_rt_static      := mining_rt_static m;
+        mining_rt_hash        := mining_rt_hash m;
+        mining_rt_interceptor := interceptor;
+      |}.
+
+    Definition upd_mining_miner
+               (m: MiningRuntimeState) (miner: address)
+      : MiningRuntimeState :=
+      let mining := mining_rt_static m in
+      {|
+        mining_rt_static      :=
+          {|
+            mining_feeRecipient := mining_feeRecipient mining;
+            mining_miner        := miner;
+            mining_sig          := mining_sig mining;
+          |};
+        mining_rt_hash        := mining_rt_hash m;
+        mining_rt_interceptor := mining_rt_interceptor m;
+      |}.
+
+  End RunTimeState.
+
+  Section SubSpec.
+
+    Record SubSpec :=
+      mk_sub_spec {
+          subspec_require: WorldState -> RingSubmitterRuntimeState -> Prop;
+          subspec_trans: WorldState -> RingSubmitterRuntimeState ->
+                         WorldState -> RingSubmitterRuntimeState ->
+                         Prop;
+          subspec_events: WorldState -> RingSubmitterRuntimeState ->
+                          list Event -> Prop;
+        }.
+
+  End SubSpec.
+
   Section SubmitRings.
+
+    Definition SubmitRingsSubSpec :=
+      address -> list Order -> list Ring -> Mining -> SubSpec.
+
+    Definition submit_rings_subspec_seq (_spec _spec': SubmitRingsSubSpec) : SubmitRingsSubSpec :=
+      fun sender orders rings mining =>
+        let spec := _spec sender orders rings mining in
+        let spec' := _spec' sender orders rings mining in
+        {|
+          subspec_require :=
+            fun wst st =>
+              subspec_require spec wst st /\
+              forall wst' st',
+                subspec_trans spec wst st wst' st' ->
+                subspec_require spec' wst' st';
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              forall wst'' st'',
+                subspec_trans spec wst st wst'' st'' /\
+                subspec_trans spec' wst'' st'' wst' st';
+
+          subspec_events :=
+            fun wst st events =>
+              forall wst' st' events' events'',
+                subspec_trans spec wst st wst' st' ->
+                subspec_events spec wst st events' ->
+                subspec_events spec' wst' st' events'' ->
+                events = events' ++ events'';
+        |}.
+
+    Definition submit_rings_subspec_to_fspec
+               (subspec: SubmitRingsSubSpec)
+               (sender: address) (orders: list Order) (rings: list Ring) (mining: Mining)
+      : FSpec :=
+      let spec := subspec sender orders rings mining in
+      let st := make_rt_submitter_state mining orders rings in
+      {|
+        fspec_require :=
+          fun wst => subspec_require spec wst st;
+
+        fspec_trans :=
+          fun wst wst' retval =>
+            retval = RetNone /\
+            forall wst'' st'',
+              subspec_trans spec wst st wst'' st'' ->
+              wst' = wst'';
+
+        fspec_events :=
+          fun wst events =>
+              subspec_events spec wst st events;
+      |}.
 
     Definition submitRings_spec
                (sender: address)
@@ -61,353 +509,7 @@ End RingSubmitter.
 
 (* Section DataTypes. *)
 
-(*   (* Order in Loopring contract is composed of two parts. One is the *)
-(*      static data from submitter, while the other is dynamically *)
-(*      generated and used only in LPSC. *)
 
-(*      `Order` in Coq defines the static part. `OrderRuntimeState` *)
-(*      combines it and the dynamic parts together. *)
-(*    *) *)
-(*   Record OrderRuntimeState := *)
-(*     mk_order_runtime_state { *)
-(*         ord_rt_order: Order; *)
-
-(*         ord_rt_p2p: bool; *)
-(*         ord_rt_hash: bytes32; *)
-(*         ord_rt_brokerInterceptor: address; *)
-(*         ord_rt_filledAmountS : uint; *)
-(*         ord_rt_initialFilledAmountS: uint; *)
-(*         ord_rt_valid: bool; *)
-(*       }. *)
-
-(*   (* Similarly for Mining. *) *)
-(*   Record MiningRuntimeState := *)
-(*     mk_mining_runtime_state { *)
-(*         mining_rt_static: Mining; *)
-(*         mining_rt_hash: bytes32; *)
-(*         mining_rt_interceptor: address; *)
-(*       }. *)
-
-(*   Record Participation := *)
-(*     mk_participation { *)
-(*         part_order_idx: nat; (* index in another order list *) *)
-(*         part_splitS: uint; *)
-(*         part_feeAmount: uint; *)
-(*         part_feeAmountS: uint; *)
-(*         part_feeAmountB: uint; *)
-(*         part_rebateFee: uint; *)
-(*         part_rebateS: uint; *)
-(*         part_rebateB: uint; *)
-(*         part_fillAmountS: uint; *)
-(*         part_fillAmountB: uint; *)
-(*       }. *)
-
-(*   Record RingRuntimeState := *)
-(*     mk_ring_runtime_state { *)
-(*         ring_rt_static: Ring; *)
-(*         ring_rt_participations: list Participation; *)
-(*         ring_rt_hash: bytes32; *)
-(*         ring_rt_valid: bool; *)
-(*       }. *)
-
-(*   (* `RingSubmitterState` models the state of RingSubmitter state *)
-(*      observable from the outside of contract. *)
-
-(*      `RingSubmitterRuntimeState` also models the state (e.g., memory) *)
-(*      that is only visible within the contract in its execution. *)
-(*    *) *)
-(*   Record RingSubmitterRuntimeState := *)
-(*     mk_ring_submitter_runtime_state { *)
-(*         submitter_rt_mining: MiningRuntimeState; *)
-(*         submitter_rt_orders: list OrderRuntimeState; *)
-(*         submitter_rt_rings: list RingRuntimeState; *)
-(*         (* TODO: add necessary fields of Context *) *)
-(*       }. *)
-
-(*   Definition make_rt_order (order: Order): OrderRuntimeState := *)
-(*     {| *)
-(*       ord_rt_order := order; *)
-(*       ord_rt_p2p := false; *)
-(*       ord_rt_hash := 0; *)
-(*       ord_rt_brokerInterceptor := 0; *)
-(*       ord_rt_filledAmountS := 0; *)
-(*       ord_rt_initialFilledAmountS := 0; *)
-(*       ord_rt_valid := true; *)
-(*     |}. *)
-
-(*   Fixpoint make_rt_orders (orders: list Order): list OrderRuntimeState := *)
-(*     match orders with *)
-(*     | nil => nil *)
-(*     | order :: orders => make_rt_order order :: make_rt_orders orders *)
-(*     end. *)
-
-(*   Definition make_rt_mining (mining: Mining): MiningRuntimeState := *)
-(*     {| *)
-(*       mining_rt_static := mining; *)
-(*       mining_rt_hash := 0; *)
-(*       mining_rt_interceptor := 0; *)
-(*     |}. *)
-
-(*   Definition make_participation (ord_idx: nat): Participation := *)
-(*     {| *)
-(*       part_order_idx := ord_idx; *)
-(*       part_splitS := 0; *)
-(*       part_feeAmount := 0; *)
-(*       part_feeAmountS := 0; *)
-(*       part_feeAmountB := 0; *)
-(*       part_rebateFee := 0; *)
-(*       part_rebateS := 0; *)
-(*       part_rebateB := 0; *)
-(*       part_fillAmountS := 0; *)
-(*       part_fillAmountB := 0; *)
-(*     |}. *)
-
-(*   Fixpoint make_participations (ord_indices: list nat): list Participation := *)
-(*     match ord_indices with *)
-(*     | nil => nil *)
-(*     | idx :: indices' => make_participation idx :: make_participations indices' *)
-(*     end. *)
-
-(*   Definition make_rt_ring (ring: Ring): RingRuntimeState := *)
-(*     {| *)
-(*       ring_rt_static := ring; *)
-(*       ring_rt_participations := make_participations (ring_orders ring); *)
-(*       ring_rt_hash := 0; *)
-(*       ring_rt_valid := true; *)
-(*     |}. *)
-
-(*   Fixpoint make_rt_rings (rings: list Ring): list RingRuntimeState := *)
-(*     match rings with *)
-(*     | nil => nil *)
-(*     | ring :: rings => make_rt_ring ring :: make_rt_rings rings *)
-(*     end. *)
-
-(*   Definition make_rt_submitter_state *)
-(*              (mining: Mining) (orders: list Order) (rings: list Ring) *)
-(*     : RingSubmitterRuntimeState := *)
-(*     {| *)
-(*       submitter_rt_mining := make_rt_mining mining; *)
-(*       submitter_rt_orders := make_rt_orders orders; *)
-(*       submitter_rt_rings := make_rt_rings rings; *)
-(*     |}. *)
-
-(*   Definition submitter_update_mining *)
-(*              (rsst: RingSubmitterRuntimeState) (st: MiningRuntimeState) *)
-(*     : RingSubmitterRuntimeState := *)
-(*     {| *)
-(*       submitter_rt_mining := st; *)
-(*       submitter_rt_orders := submitter_rt_orders rsst; *)
-(*       submitter_rt_rings := submitter_rt_rings rsst; *)
-(*     |}. *)
-
-(*   Definition submitter_update_orders *)
-(*              (rsst: RingSubmitterRuntimeState) (sts: list OrderRuntimeState) *)
-(*     : RingSubmitterRuntimeState := *)
-(*     {| *)
-(*       submitter_rt_mining := submitter_rt_mining rsst; *)
-(*       submitter_rt_orders := sts; *)
-(*       submitter_rt_rings := submitter_rt_rings rsst; *)
-(*     |}. *)
-
-(*   Definition submitter_update_rings *)
-(*              (rsst: RingSubmitterRuntimeState) (sts: list RingRuntimeState) *)
-(*     : RingSubmitterRuntimeState := *)
-(*     {| *)
-(*       submitter_rt_mining := submitter_rt_mining rsst; *)
-(*       submitter_rt_orders := submitter_rt_orders rsst; *)
-(*       submitter_rt_rings := sts; *)
-(*     |}. *)
-
-(*   Definition upd_order_broker *)
-(*              (ord: OrderRuntimeState) (broker: address) *)
-(*     : OrderRuntimeState := *)
-(*     let order := ord_rt_order ord in *)
-(*     {| *)
-(*       ord_rt_order := *)
-(*         {| *)
-(*           order_version               := order_version               order; *)
-(*           order_owner                 := order_owner                 order; *)
-(*           order_tokenS                := order_tokenS                order; *)
-(*           order_tokenB                := order_tokenB                order; *)
-(*           order_amountS               := order_amountS               order; *)
-(*           order_amountB               := order_amountB               order; *)
-(*           order_validSince            := order_validSince            order; *)
-(*           order_tokenSpendableS       := order_tokenSpendableS       order; *)
-(*           order_tokenSpendableFee     := order_tokenSpendableFee     order; *)
-(*           order_dualAuthAddr          := order_dualAuthAddr          order; *)
-(*           order_broker                := broker; *)
-(*           order_brokerSpendableS      := order_brokerSpendableS      order; *)
-(*           order_brokerSpendableFee    := order_brokerSpendableFee    order; *)
-(*           order_orderInterceptor      := order_orderInterceptor      order; *)
-(*           order_wallet                := order_wallet                order; *)
-(*           order_validUntil            := order_validUntil            order; *)
-(*           order_sig                   := order_sig                   order; *)
-(*           order_dualAuthSig           := order_dualAuthSig           order; *)
-(*           order_allOrNone             := order_allOrNone             order; *)
-(*           order_feeToken              := order_feeToken              order; *)
-(*           order_feeAmount             := order_feeAmount             order; *)
-(*           order_feePercentage         := order_feePercentage         order; *)
-(*           order_waiveFeePercentage    := order_waiveFeePercentage    order; *)
-(*           order_tokenSFeePercentage   := order_tokenSFeePercentage   order; *)
-(*           order_tokenBFeePercentage   := order_tokenBFeePercentage   order; *)
-(*           order_tokenRecipient        := order_tokenRecipient        order; *)
-(*           order_walletSplitPercentage := order_walletSplitPercentage order; *)
-(*         |}; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord; *)
-(*       ord_rt_filledAmountS        := ord_rt_filledAmountS ord; *)
-(*       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord; *)
-(*       ord_rt_valid                := ord_rt_valid ord; *)
-(*     |}. *)
-
-(*   Definition upd_order_interceptor *)
-(*              (ord: OrderRuntimeState) (interceptor: address) *)
-(*     : OrderRuntimeState := *)
-(*     {| *)
-(*       ord_rt_order                := ord_rt_order ord; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := interceptor; *)
-(*       ord_rt_filledAmountS        := ord_rt_filledAmountS ord; *)
-(*       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord; *)
-(*       ord_rt_valid                := ord_rt_valid ord; *)
-(*     |}. *)
-
-(*   Definition upd_order_valid *)
-(*              (ord: OrderRuntimeState) (valid: bool) *)
-(*     : OrderRuntimeState := *)
-(*     {| *)
-(*       ord_rt_order                := ord_rt_order ord; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord; *)
-(*       ord_rt_filledAmountS        := ord_rt_filledAmountS ord; *)
-(*       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord; *)
-(*       ord_rt_valid                := valid; *)
-(*     |}. *)
-
-(*   Definition upd_order_init_filled *)
-(*              (ord: OrderRuntimeState) (amount: uint) *)
-(*     : OrderRuntimeState := *)
-(*     {| *)
-(*       ord_rt_order                := ord_rt_order ord; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord; *)
-(*       ord_rt_filledAmountS        := ord_rt_filledAmountS ord; *)
-(*       ord_rt_initialFilledAmountS := amount; *)
-(*       ord_rt_valid                := ord_rt_valid ord; *)
-(*     |}. *)
-
-(*   Definition upd_order_filled *)
-(*              (ord: OrderRuntimeState) (amount: uint) *)
-(*     : OrderRuntimeState := *)
-(*     {| *)
-(*       ord_rt_order                := ord_rt_order ord; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord; *)
-(*       ord_rt_filledAmountS        := amount; *)
-(*       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord; *)
-(*       ord_rt_valid                := ord_rt_valid ord; *)
-(*     |}. *)
-
-(*   Definition clear_order_broker_spendables *)
-(*              (ord: OrderRuntimeState) *)
-(*     : OrderRuntimeState := *)
-(*     let order := ord_rt_order ord in *)
-(*     {| *)
-(*       ord_rt_order := *)
-(*         {| *)
-(*           order_version               := order_version               order; *)
-(*           order_owner                 := order_owner                 order; *)
-(*           order_tokenS                := order_tokenS                order; *)
-(*           order_tokenB                := order_tokenB                order; *)
-(*           order_amountS               := order_amountS               order; *)
-(*           order_amountB               := order_amountB               order; *)
-(*           order_validSince            := order_validSince            order; *)
-(*           order_tokenSpendableS       := order_tokenSpendableS       order; *)
-(*           order_tokenSpendableFee     := order_tokenSpendableFee     order; *)
-(*           order_dualAuthAddr          := order_dualAuthAddr          order; *)
-(*           order_broker                := order_broker                order; *)
-(*           order_brokerSpendableS      := mk_spendable false 0 0; *)
-(*           order_brokerSpendableFee    := mk_spendable false 0 0; *)
-(*           order_orderInterceptor      := order_orderInterceptor      order; *)
-(*           order_wallet                := order_wallet                order; *)
-(*           order_validUntil            := order_validUntil            order; *)
-(*           order_sig                   := order_sig                   order; *)
-(*           order_dualAuthSig           := order_dualAuthSig           order; *)
-(*           order_allOrNone             := order_allOrNone             order; *)
-(*           order_feeToken              := order_feeToken              order; *)
-(*           order_feeAmount             := order_feeAmount             order; *)
-(*           order_feePercentage         := order_feePercentage         order; *)
-(*           order_waiveFeePercentage    := order_waiveFeePercentage    order; *)
-(*           order_tokenSFeePercentage   := order_tokenSFeePercentage   order; *)
-(*           order_tokenBFeePercentage   := order_tokenBFeePercentage   order; *)
-(*           order_tokenRecipient        := order_tokenRecipient        order; *)
-(*           order_walletSplitPercentage := order_walletSplitPercentage order; *)
-(*         |}; *)
-(*       ord_rt_p2p                  := ord_rt_p2p ord; *)
-(*       ord_rt_hash                 := ord_rt_hash ord; *)
-(*       ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord; *)
-(*       ord_rt_filledAmountS        := ord_rt_filledAmountS ord; *)
-(*       ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord; *)
-(*       ord_rt_valid                := ord_rt_valid ord; *)
-(*     |}. *)
-
-(*   Definition upd_ring_hash *)
-(*              (r: RingRuntimeState) (hash: bytes32) *)
-(*     : RingRuntimeState := *)
-(*     {| *)
-(*       ring_rt_static         := ring_rt_static r; *)
-(*       ring_rt_participations := ring_rt_participations r; *)
-(*       ring_rt_hash           := hash; *)
-(*       ring_rt_valid          := ring_rt_valid r; *)
-(*     |}. *)
-
-(*   Definition upd_ring_valid *)
-(*              (r: RingRuntimeState) (valid: bool) *)
-(*     : RingRuntimeState := *)
-(*     {| *)
-(*       ring_rt_static         := ring_rt_static r; *)
-(*       ring_rt_participations := ring_rt_participations r; *)
-(*       ring_rt_hash           := ring_rt_hash r; *)
-(*       ring_rt_valid          := valid; *)
-(*     |}. *)
-
-(*   Definition upd_mining_hash *)
-(*              (m: MiningRuntimeState) (hash: bytes32) *)
-(*     : MiningRuntimeState := *)
-(*     {| *)
-(*       mining_rt_static      := mining_rt_static m; *)
-(*       mining_rt_hash        := hash; *)
-(*       mining_rt_interceptor := mining_rt_interceptor m; *)
-(*     |}. *)
-
-(*   Definition upd_mining_interceptor *)
-(*              (m: MiningRuntimeState) (interceptor: address) *)
-(*     : MiningRuntimeState := *)
-(*     {| *)
-(*       mining_rt_static      := mining_rt_static m; *)
-(*       mining_rt_hash        := mining_rt_hash m; *)
-(*       mining_rt_interceptor := interceptor; *)
-(*     |}. *)
-
-(*   Definition upd_mining_miner *)
-(*              (m: MiningRuntimeState) (miner: address) *)
-(*     : MiningRuntimeState := *)
-(*     let mining := mining_rt_static m in *)
-(*     {| *)
-(*       mining_rt_static      := *)
-(*         {| *)
-(*           mining_feeRecipient := mining_feeRecipient mining; *)
-(*           mining_miner        := miner; *)
-(*           mining_sig          := mining_sig mining; *)
-(*         |}; *)
-(*       mining_rt_hash        := mining_rt_hash m; *)
-(*       mining_rt_interceptor := mining_rt_interceptor m; *)
-(*     |}. *)
 
 (* End DataTypes. *)
 
