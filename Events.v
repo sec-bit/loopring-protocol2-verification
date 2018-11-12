@@ -48,5 +48,6 @@ Inductive RetVal : Type :=
 | RetBool (val: bool)
 | RetAddr (val: address)
 | RetFills (val: list (option uint))
-| RetGetBroker (registered: bool) (interceptor: address)
+| RetBrokerInterceptor (interceptor: option address) (* None: not registered
+                                                        Some _: registered *)
 .
