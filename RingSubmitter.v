@@ -48,6 +48,38 @@ Section HashAxioms.
 
 End HashAxioms.
 
+Module SpendableElem <: ElemType.
+  Definition elt := Spendable.
+  Definition elt_zero := mk_spendable false O O.
+  Definition elt_eq := fun (x x': elt) => x = x'.
+
+  Lemma elt_eq_dec:
+    forall (x y: elt), { x = y } + { ~ x = y }.
+  Proof.
+  Admitted.
+
+  Lemma elt_eq_refl:
+    forall x, elt_eq x x.
+  Proof.
+    unfold elt_eq; auto.
+  Qed.
+
+  Lemma elt_eq_symm:
+    forall x y, elt_eq x y -> elt_eq y x.
+  Proof.
+    unfold elt_eq; auto.
+  Qed.
+
+  Lemma elt_eq_trans:
+    forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
+  Proof.
+    unfold elt_eq; intros; congruence.
+  Qed.
+
+End SpendableElem.
+
+Module SpendableMap := Mapping AAA_as_DT SpendableElem.
+
 
 Module RingSubmitter.
 
@@ -113,6 +145,7 @@ Module RingSubmitter.
           submitter_rt_mining: MiningRuntimeState;
           submitter_rt_orders: list OrderRuntimeState;
           submitter_rt_rings: list RingRuntimeState;
+          submitter_rt_spendables: SpendableMap.t;
           (* TODO: add necessary fields of Context *)
         }.
 
@@ -182,6 +215,7 @@ Module RingSubmitter.
         submitter_rt_mining := make_rt_mining mining;
         submitter_rt_orders := make_rt_orders orders;
         submitter_rt_rings := make_rt_rings rings;
+        submitter_rt_spendables := SpendableMap.empty;
       |}.
 
     Definition submitter_update_mining
@@ -191,6 +225,7 @@ Module RingSubmitter.
         submitter_rt_mining := st;
         submitter_rt_orders := submitter_rt_orders rsst;
         submitter_rt_rings := submitter_rt_rings rsst;
+        submitter_rt_spendables := submitter_rt_spendables rsst;
       |}.
 
     Definition submitter_update_orders
@@ -200,6 +235,7 @@ Module RingSubmitter.
         submitter_rt_mining := submitter_rt_mining rsst;
         submitter_rt_orders := sts;
         submitter_rt_rings := submitter_rt_rings rsst;
+        submitter_rt_spendables := submitter_rt_spendables rsst;
       |}.
 
     Definition submitter_update_rings
@@ -209,6 +245,17 @@ Module RingSubmitter.
         submitter_rt_mining := submitter_rt_mining rsst;
         submitter_rt_orders := submitter_rt_orders rsst;
         submitter_rt_rings := sts;
+        submitter_rt_spendables := submitter_rt_spendables rsst;
+      |}.
+
+    Definition submitter_update_spendables
+               (rsst: RingSubmitterRuntimeState) (spendables: SpendableMap.t)
+      : RingSubmitterRuntimeState :=
+      {|
+        submitter_rt_mining := submitter_rt_mining rsst;
+        submitter_rt_orders := submitter_rt_orders rsst;
+        submitter_rt_rings := submitter_rt_rings rsst;
+        submitter_rt_spendables := spendables;
       |}.
 
     Definition upd_order_broker
@@ -629,6 +676,26 @@ Module RingSubmitter.
 
     End GetFilledAndCheckCancelled.
 
+    Section UpdateBrokerSpendable.
+
+      Definition get_order_tokenS_spendable
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        SpendableMap.get (submitter_rt_spendables st) (broker, owner, token).
+
+      Definition get_order_feeToken_spendable
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_feeToken order in
+        SpendableMap.get (submitter_rt_spendables st) (broker, owner, token).
+
+    End UpdateBrokerSpendable.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -711,29 +778,6 @@ Module RingSubmitter.
     fspec_sat (get_spec msg) wst wst' retval events.
 
 End RingSubmitter.
-
-
-
-(*   Section UpdateBrokerSpendables. *)
-
-(*     Fixpoint __update_orders_spendables *)
-(*              (orders: list OrderRuntimeState) *)
-(*     : list OrderRuntimeState := *)
-(*       match orders with *)
-(*       | nil => nil *)
-(*       | order :: orders' => *)
-(*         (* ??? *) *)
-(*         clear_order_broker_spendables order :: __update_orders_spendables orders' *)
-(*       end. *)
-
-(*     Definition update_broker_spendables *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*     : (WorldState * RingSubmitterRuntimeState * list Event) := *)
-(*       (wst, *)
-(*        submitter_update_orders st (__update_orders_spendables (submitter_rt_orders st)), *)
-(*        nil). *)
-
-(*   End UpdateBrokerSpendables. *)
 
 
 (*   Section CheckOrders. *)

@@ -81,6 +81,7 @@ Module AA_as_DT := DecidableTypeEx.PairDecidableType (Address_as_DT) (Address_as
 Module Hash_as_DT <: UsualDecidableType := Nat_as_DT.
 Module AH_as_DT := DecidableTypeEx.PairDecidableType (Address_as_DT) (Hash_as_DT).
 Module AAH_as_DT := DecidableTypeEx.PairDecidableType (AA_as_DT) (Hash_as_DT).
+Module AAA_as_DT := DecidableTypeEx.PairDecidableType (AA_as_DT) (Address_as_DT).
 
 
 (** Concrete Element Types *)
