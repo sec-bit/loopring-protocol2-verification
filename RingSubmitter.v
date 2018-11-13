@@ -14,6 +14,9 @@ Require Import
         TradeDelegate.
 
 
+Open Scope bool_scope.
+
+
 Parameters get_order_hash: Order -> bytes32.
 
 Section HashAxioms.
@@ -349,6 +352,19 @@ Module RingSubmitter.
         ord_rt_hash                 := ord_rt_hash ord;
         ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
         ord_rt_filledAmountS        := amount;
+        ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
+        ord_rt_valid                := ord_rt_valid ord;
+      |}.
+
+    Definition upd_order_p2p
+               (ord: OrderRuntimeState) (p2p: bool)
+      : OrderRuntimeState :=
+      {|
+        ord_rt_order                := ord_rt_order ord;
+        ord_rt_p2p                  := p2p;
+        ord_rt_hash                 := ord_rt_hash ord;
+        ord_rt_brokerInterceptor    := ord_rt_brokerInterceptor ord;
+        ord_rt_filledAmountS        := ord_rt_filledAmountS ord;
         ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS ord;
         ord_rt_valid                := ord_rt_valid ord;
       |}.
@@ -696,6 +712,77 @@ Module RingSubmitter.
 
     End UpdateBrokerSpendable.
 
+    Section CheckOrders.
+
+      Definition is_order_valid (ord: OrderRuntimeState) (now: uint) : bool :=
+        let order := ord_rt_order ord in
+        (* if order.filledAmountS == 0 then ... *)
+        (implb (Nat.eqb (ord_rt_filledAmountS ord) O)
+               ((Nat.eqb (order_version order) 0) &&
+               (negb (Nat.eqb (order_owner order) 0)) &&
+               (negb (Nat.eqb (order_tokenS order) 0)) &&
+               (negb (Nat.eqb (order_tokenB order) 0)) &&
+               (negb (Nat.eqb (order_amountS order) 0)) &&
+               (negb (Nat.eqb (order_feeToken order) 0)) &&
+               (Nat.ltb (order_feePercentage order) FEE_PERCENTAGE_BASE_N) &&
+               (Nat.ltb (order_tokenSFeePercentage order) FEE_PERCENTAGE_BASE_N) &&
+               (Nat.ltb (order_tokenBFeePercentage order) FEE_PERCENTAGE_BASE_N) &&
+               (Nat.leb (order_walletSplitPercentage order) 100) &&
+               (Nat.leb (order_validSince order) now)
+               (* TODO: model signature check *))) &&
+        (* common check *)
+        (Nat.eqb (order_validUntil order) 0 || Nat.ltb now (order_validUntil order)) &&
+        (Z.leb (order_waiveFeePercentage order) FEE_PERCENTAGE_BASE_Z) &&
+        (Z.leb (- FEE_PERCENTAGE_BASE_Z) (order_waiveFeePercentage order)) &&
+        (Nat.eqb (order_dualAuthAddr order) 0 || Nat.ltb 0 (length (order_dualAuthSig order))) &&
+        (ord_rt_valid ord).
+
+      Fixpoint update_orders_valid (orders: list OrderRuntimeState) (now: uint)
+        : list OrderRuntimeState :=
+        match orders with
+        | nil => nil
+        | order :: orders' =>
+          upd_order_valid order (is_order_valid order now) :: update_orders_valid orders' now
+        end.
+
+      Definition is_order_p2p (ord: OrderRuntimeState) : bool :=
+        let order := ord_rt_order ord in
+        (Nat.ltb 0 (order_tokenSFeePercentage order)) ||
+        (Nat.ltb 0 (order_tokenBFeePercentage order)).
+
+      Fixpoint update_orders_p2p (orders: list OrderRuntimeState)
+        : list OrderRuntimeState :=
+        match orders with
+        | nil => nil
+        | order :: orders' =>
+          upd_order_p2p order (is_order_p2p order) :: update_orders_p2p orders'
+        end.
+
+      Definition check_orders_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              let orders' := update_orders_valid
+                               (submitter_rt_orders st)
+                               (block_timestamp (wst_block_state wst)) in
+              let orders' := update_orders_p2p orders' in
+              st' = submitter_update_orders st orders';
+
+          subspec_events :=
+            fun wst st events =>
+              events = nil;
+        |}.
+
+    End CheckOrders.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -756,7 +843,8 @@ Module RingSubmitter.
         (
            update_orders_hashes_subspec ;;
            update_orders_brokers_and_interceptors ;;
-           get_filled_and_check_cancelled_subspec
+           get_filled_and_check_cancelled_subspec ;;
+           check_orders_subspec
         )
         sender orders rings mining.
 
@@ -778,50 +866,6 @@ Module RingSubmitter.
     fspec_sat (get_spec msg) wst wst' retval events.
 
 End RingSubmitter.
-
-
-(*   Section CheckOrders. *)
-
-(*     Definition is_order_valid (order: OrderRuntimeState) (now: uint) : bool := *)
-(*       let static_order := ord_rt_order order in *)
-(*       (ord_rt_valid order) && *)
-(*       (Nat.eqb (order_version static_order) 0) && *)
-(*       (negb (Nat.eqb (order_owner static_order) 0)) && *)
-(*       (negb (Nat.eqb (order_tokenS static_order) 0)) && *)
-(*       (negb (Nat.eqb (order_tokenB static_order) 0)) && *)
-(*       (negb (Nat.eqb (order_amountS static_order) 0)) && *)
-(*       (negb (Nat.eqb (order_feeToken static_order) 0)) && *)
-(*       (Nat.ltb (order_feePercentage static_order) FEE_PERCENTAGE_BASE_N) && *)
-(*       (Nat.ltb (order_tokenSFeePercentage static_order) FEE_PERCENTAGE_BASE_N) && *)
-(*       (Nat.ltb (order_tokenBFeePercentage static_order) FEE_PERCENTAGE_BASE_N) && *)
-(*       (Nat.leb (order_walletSplitPercentage static_order) 100) && *)
-(*       (Nat.leb (order_validSince static_order) now) && *)
-(*       (Nat.eqb (order_validUntil static_order) 0 || *)
-(*        Nat.ltb now (order_validUntil static_order)) && *)
-(*       (Z.leb (order_waiveFeePercentage static_order) FEE_PERCENTAGE_BASE_Z) && *)
-(*       (Z.leb (- FEE_PERCENTAGE_BASE_Z) (order_waiveFeePercentage static_order)) && *)
-(*       (Nat.eqb (order_dualAuthAddr static_order) 0 || *)
-(*        Nat.ltb 0 (length (order_dualAuthSig static_order))) *)
-(*       (* TODO: model signature check *) *)
-(*     . *)
-
-(*     Fixpoint __check_orders *)
-(*              (orders: list OrderRuntimeState) (now: uint) *)
-(*       : list OrderRuntimeState := *)
-(*       match orders with *)
-(*       | nil => nil *)
-(*       | order :: orders' => *)
-(*         upd_order_valid order (is_order_valid order now) :: __check_orders orders' now *)
-(*       end. *)
-
-(*     Definition check_orders *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*     : (WorldState * RingSubmitterRuntimeState * list Event) := *)
-(*       let orders' := __check_orders (submitter_rt_orders st) *)
-(*                                     (block_timestamp (wst_block_state wst)) in *)
-(*       (wst, submitter_update_orders st orders', nil). *)
-
-(*   End CheckOrders. *)
 
 
 (*   (* Again, we use an abstract function to model the calculation of ring hash. *) *)
