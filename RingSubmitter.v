@@ -538,6 +538,97 @@ Module RingSubmitter.
 
     End UpdateOrdersBrokersAndIntercetors.
 
+    Section GetFilledAndCheckCancelled.
+
+      Fixpoint make_order_params
+               (orders: list OrderRuntimeState) : list OrderParam :=
+        match orders with
+        | nil => nil
+        | order :: orders' =>
+          let static_order := ord_rt_order order in
+          let param :=
+              {|
+                order_param_broker := order_broker static_order;
+                order_param_owner  := order_owner static_order;
+                order_param_hash   := ord_rt_hash order;
+                order_param_validSince := order_validSince static_order;
+                order_param_tradingPair := Nat.lxor (order_tokenS static_order) (order_tokenB static_order);
+              |}
+          in param :: make_order_params orders'
+        end.
+
+      Definition batchGetFilledAndCheckCancelled_success
+                 (wst: WorldState) (st: RingSubmitterRuntimeState)
+                 (fills: list (option uint))
+                 (wst': WorldState) (events: list Event) : Prop :=
+        TradeDelegate.model
+          wst
+          (msg_batchGetFilledAndCheckCancelled
+             (wst_ring_submitter_addr wst)
+             (make_order_params (submitter_rt_orders st)))
+          wst' (RetFills fills) events.
+
+      Inductive update_order_filled_and_valid (order: OrderRuntimeState)
+        : option uint -> OrderRuntimeState -> Prop :=
+      | UpdateOrderFilledAndValid_noncancelled:
+          forall amount,
+            update_order_filled_and_valid
+              order (Some amount)
+              (upd_order_filled (upd_order_init_filled order amount) amount)
+
+      | UpdateOrderFilledAndValid_cancelled:
+          update_order_filled_and_valid order None (upd_order_valid order false)
+      .
+
+      Inductive update_orders_filled_and_valid
+        : list OrderRuntimeState (* orders in pre-state *) ->
+          list (option uint)     (* argument fills *) ->
+          list OrderRuntimeState (* orders in post-state *) ->
+          Prop :=
+      | UpdateOrdersFilledAndValid_nil:
+          update_orders_filled_and_valid nil nil nil
+
+      | UpdateOrdersFilledAndValid_cons:
+          forall order orders fill fills order' orders',
+            update_order_filled_and_valid order fill order' ->
+            update_orders_filled_and_valid orders fills orders' ->
+            update_orders_filled_and_valid
+              (order :: orders) (fill :: fills) (order' :: orders')
+      .
+
+      Definition get_filled_and_check_cancelled_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st =>
+              forall fills wst' events,
+                batchGetFilledAndCheckCancelled_success wst st fills wst' events ->
+                length fills = length (submitter_rt_orders st)
+          ;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              forall fills wst'' events,
+                batchGetFilledAndCheckCancelled_success wst st fills wst'' events ->
+                wst' = wst'' /\
+                forall orders',
+                  update_orders_filled_and_valid (submitter_rt_orders st) fills orders' ->
+                  st' = submitter_update_orders st orders'
+          ;
+
+          subspec_events :=
+            fun wst st events =>
+              forall fills wst' events',
+                batchGetFilledAndCheckCancelled_success wst st fills wst' events' ->
+                events = events'
+          ;
+        |}.
+
+    End GetFilledAndCheckCancelled.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -567,6 +658,7 @@ Module RingSubmitter.
                 subspec_events spec' wst' st' events'' ->
                 events = events' ++ events'';
         |}.
+    Notation "s ;; s'" := (submit_rings_subspec_seq s s') (left associativity, at level 400).
 
     Definition submit_rings_subspec_to_fspec
                (subspec: SubmitRingsSubSpec)
@@ -594,9 +686,11 @@ Module RingSubmitter.
                (sender: address)
                (orders: list Order) (rings: list Ring) (mining: Mining) :=
       submit_rings_subspec_to_fspec
-        (submit_rings_subspec_seq
-           update_orders_hashes_subspec
-           update_orders_brokers_and_interceptors)
+        (
+           update_orders_hashes_subspec ;;
+           update_orders_brokers_and_interceptors ;;
+           get_filled_and_check_cancelled_subspec
+        )
         sender orders rings mining.
 
   End SubmitRings.
@@ -618,74 +712,6 @@ Module RingSubmitter.
 
 End RingSubmitter.
 
-
-
-(*   Section GetFilledAndCancelled. *)
-
-(*     Fixpoint build_order_params *)
-(*              (orders: list OrderRuntimeState) : list OrderParam := *)
-(*       match orders with *)
-(*       | nil => nil *)
-(*       | order :: orders' => *)
-(*         let static_order := ord_rt_order order in *)
-(*         let param := *)
-(*             {| *)
-(*               order_param_broker := order_broker static_order; *)
-(*               order_param_owner  := order_owner static_order; *)
-(*               order_param_hash   := ord_rt_hash order; *)
-(*               order_param_validSince := order_validSince static_order; *)
-(*               order_param_tradingPair := Nat.lxor (order_tokenS static_order) (order_tokenB static_order); *)
-(*             |} *)
-(*         in param :: build_order_params orders' *)
-(*       end. *)
-
-(*     Definition update_order_filled *)
-(*                (order: OrderRuntimeState) (filled: option uint) *)
-(*       : OrderRuntimeState := *)
-(*       match filled with *)
-(*       | None => upd_order_valid order false *)
-(*       | Some amount => upd_order_filled (upd_order_init_filled order amount) *)
-(*                                        amount *)
-(*       end. *)
-
-(*     Fixpoint update_orders_filled *)
-(*              (orders: list OrderRuntimeState) (fills: list (option uint)) *)
-(*       : list OrderRuntimeState := *)
-(*       match orders with *)
-(*       | nil => nil *)
-(*       | order :: orders' => *)
-(*         match fills with *)
-(*         | nil => nil *)
-(*         | filled :: fills' => *)
-(*           update_order_filled order filled :: update_orders_filled orders' fills' *)
-(*         end *)
-(*       end. *)
-
-(*     Definition get_filled_and_check_cancelled *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*       : (WorldState * RingSubmitterRuntimeState * list Event) := *)
-(*       let params := build_order_params (submitter_rt_orders st) in *)
-(*       match TradeDelegate_step *)
-(*               wst0 wst (msg_batchGetFilledAndCheckCancelled (wst_ring_submitter_addr wst) params) *)
-(*       with *)
-(*       | (wst', ret', evts') => *)
-(*         if has_revert_event evts' then *)
-(*           (wst0, st, EvtRevert :: nil) *)
-(*         else *)
-(*           match ret' with *)
-(*           | RetFills fills => *)
-(*             let orders := submitter_rt_orders st in *)
-(*             if Nat.eqb (length fills) (length orders) then *)
-(*               (wst', *)
-(*                submitter_update_orders st (update_orders_filled orders fills), *)
-(*                evts') *)
-(*             else *)
-(*               (wst0, st, EvtRevert :: nil) *)
-(*           | _ => (wst0, st, EvtRevert :: nil) *)
-(*           end *)
-(*       end. *)
-
-(*   End GetFilledAndCancelled. *)
 
 
 (*   Section UpdateBrokerSpendables. *)
