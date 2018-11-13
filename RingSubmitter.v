@@ -461,6 +461,82 @@ Module RingSubmitter.
 
     End UpdateOrdersHashes.
 
+    Section UpdateOrdersBrokersAndIntercetors.
+
+      Definition get_broker_success
+                 (wst: WorldState) (ord: OrderRuntimeState)
+                 (wst': WorldState) (retval: option address) (events: list Event)
+      : Prop :=
+        let order := ord_rt_order ord in
+        BrokerRegistry.model
+          wst
+          (msg_getBroker (wst_ring_submitter_addr wst)
+                         (order_owner order) (order_broker order))
+          wst' (RetBrokerInterceptor retval) events.
+
+      Inductive update_order_broker_interceptor
+                (wst: WorldState) (ord: OrderRuntimeState)
+        : WorldState -> OrderRuntimeState -> list Event -> Prop :=
+      | UpdateBrokerInterceptor_P2P:
+          let order := ord_rt_order ord in
+          order_broker order = O ->
+          update_order_broker_interceptor
+            wst ord wst (upd_order_broker ord (order_owner order)) nil
+
+      | UpdateBrokerInterceptor_NonP2P_registered:
+          forall wst' interceptor events,
+            get_broker_success wst ord wst' (Some interceptor) events ->
+            update_order_broker_interceptor wst ord wst' ord events
+
+      | UpdateBrokerInterceptor_NonP2P_unregistered:
+          forall wst' events,
+            get_broker_success wst ord wst' None events ->
+            update_order_broker_interceptor
+              wst ord wst' (upd_order_valid ord false) events
+      .
+
+      Inductive update_orders_broker_interceptor (wst: WorldState)
+        : list OrderRuntimeState ->
+          WorldState -> list OrderRuntimeState -> list Event -> Prop :=
+      | UpdateOrdersBrokerInterceptor_nil:
+          update_orders_broker_interceptor wst nil wst nil nil
+
+      | UpdateOrdersBrokerInterceptor_cons:
+          forall order orders wst' order' events wst'' orders' events',
+            update_order_broker_interceptor wst order wst' order' events ->
+            update_orders_broker_interceptor wst' orders wst'' orders' events' ->
+            update_orders_broker_interceptor
+              wst (order :: orders) wst'' (order' :: orders') (events ++ events')
+      .
+
+      Definition update_orders_brokers_and_interceptors
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              forall wst'' orders' events,
+                update_orders_broker_interceptor
+                  wst (submitter_rt_orders st) wst'' orders' events ->
+                wst' = wst'' /\
+                st' = submitter_update_orders st orders'
+          ;
+
+          subspec_events :=
+            fun wst st events =>
+              forall wst' orders' events',
+                update_orders_broker_interceptor
+                  wst (submitter_rt_orders st) wst' orders' events' ->
+                events = events'
+          ;
+        |}.
+
+    End UpdateOrdersBrokersAndIntercetors.
 
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
@@ -518,7 +594,9 @@ Module RingSubmitter.
                (sender: address)
                (orders: list Order) (rings: list Ring) (mining: Mining) :=
       submit_rings_subspec_to_fspec
-        update_orders_hashes_subspec
+        (submit_rings_subspec_seq
+           update_orders_hashes_subspec
+           update_orders_brokers_and_interceptors)
         sender orders rings mining.
 
   End SubmitRings.
@@ -540,144 +618,6 @@ Module RingSubmitter.
 
 End RingSubmitter.
 
-
-(* Section DataTypes. *)
-
-
-
-(* End DataTypes. *)
-
-
-(* Section Func_submitRings. *)
-
-(*   (* We only define an abstract hash function with several properties *)
-(*      rather than a concrete keccak until a concrete one is really *)
-(*      needed. *)
-(*    *) *)
-(*   Context `{order_hash: Order -> bytes32}. *)
-(*   Definition get_order_hash_preimg (order: Order) := *)
-(*     (order_allOrNone order, *)
-(*      order_tokenBFeePercentage order, *)
-(*      order_tokenSFeePercentage order, *)
-(*      order_feePercentage order, *)
-(*      order_walletSplitPercentage order, *)
-(*      order_feeToken order, *)
-(*      order_tokenRecipient order, *)
-(*      order_wallet order, *)
-(*      order_orderInterceptor order, *)
-(*      order_broker order, *)
-(*      order_dualAuthAddr order, *)
-(*      order_tokenB order, *)
-(*      order_tokenS order, *)
-(*      order_owner order, *)
-(*      order_validUntil order, *)
-(*      order_validSince order, *)
-(*      order_feeAmount order, *)
-(*      order_amountB order, *)
-(*      order_amountS order). *)
-(*   Context `{order_hash_dec: forall ord ord': Order, *)
-(*                (get_order_hash_preimg ord = get_order_hash_preimg ord' -> order_hash ord = order_hash ord') /\ *)
-(*                (get_order_hash_preimg ord <> get_order_hash_preimg ord' -> order_hash ord <> order_hash ord')}. *)
-
-(*   Section UpdateOrdersHash. *)
-
-(*     Fixpoint __update_orders_hash *)
-(*              (orders: list OrderRuntimeState) *)
-(*     : list OrderRuntimeState := *)
-(*       match orders with *)
-(*       | nil => nil *)
-(*       | order :: orders' => *)
-(*         let order' := {| *)
-(*               ord_rt_order := ord_rt_order order; *)
-(*               ord_rt_p2p := ord_rt_p2p order; *)
-(*               ord_rt_hash := order_hash (ord_rt_order order); *)
-(*               ord_rt_brokerInterceptor := ord_rt_brokerInterceptor order; *)
-(*               ord_rt_filledAmountS := ord_rt_filledAmountS order; *)
-(*               ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS order; *)
-(*               ord_rt_valid := ord_rt_valid order; *)
-(*             |} *)
-(*         in order' :: __update_orders_hash orders' *)
-(*       end. *)
-
-(*     Definition update_orders_hash *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*       : (WorldState * RingSubmitterRuntimeState * list Event) := *)
-(*       (wst, *)
-(*        submitter_update_orders st (__update_orders_hash (submitter_rt_orders st)), *)
-(*        nil). *)
-
-(*   End UpdateOrdersHash. *)
-
-
-(*   Section UpdateOrdersBrokernAndInterceptor. *)
-
-(*     Definition call_get_broker *)
-(*                (wst0 wst: WorldState) (order: OrderRuntimeState) *)
-(*     : (WorldState * OrderRuntimeState * list Event) := *)
-(*       let static_order := ord_rt_order order in *)
-(*       let owner := order_owner static_order in *)
-(*       let broker := order_broker static_order in *)
-(*       let valid := ord_rt_valid order in *)
-(*       match BrokerRegistry_step *)
-(*               wst0 wst (msg_getBroker (wst_ring_submitter_addr wst) owner broker) *)
-(*       with *)
-(*       | (wst', ret', evts') => *)
-(*         if has_revert_event evts' then *)
-(*           (wst0, order, EvtRevert :: nil) *)
-(*         else *)
-(*           match ret' with *)
-(*           | RetGetBroker registered interceptor => *)
-(*             let order' := upd_order_interceptor order interceptor in *)
-(*             let order' := if andb registered valid then *)
-(*                             upd_order_valid order' true *)
-(*                           else *)
-(*                             upd_order_valid order' false *)
-(*             in (wst', order', evts') *)
-(*           | _ => (wst0, order, EvtRevert :: nil) *)
-(*           end *)
-(*       end. *)
-
-(*     Fixpoint __update_orders_broker_interceptor *)
-(*              (wst0 wst: WorldState) (orders: list OrderRuntimeState) *)
-(*     : (WorldState * list OrderRuntimeState * list Event) := *)
-(*       match orders with *)
-(*       | nil => (wst, nil, nil) *)
-(*       | order :: orders' => *)
-(*         let static_order := ord_rt_order order in *)
-(*         match *)
-(*           match order_broker static_order with *)
-(*           | O => (wst, *)
-(*                  upd_order_broker order (order_owner static_order), *)
-(*                  nil) *)
-(*           | _ => call_get_broker wst0 wst order *)
-(*           end *)
-(*         with *)
-(*         | (wst', order', evts') => *)
-(*           if has_revert_event evts' then *)
-(*             (wst0, nil, EvtRevert :: nil) *)
-(*           else *)
-(*             match  __update_orders_broker_interceptor wst0 wst' orders' with *)
-(*             | (wst'', orders'', evts'') => *)
-(*               if has_revert_event evts'' then *)
-(*                 (wst0, nil, EvtRevert :: nil) *)
-(*               else *)
-(*                 (wst'', order' :: orders'', evts' ++ evts'') *)
-(*             end *)
-(*         end *)
-(*       end. *)
-
-(*     Definition update_orders_broker_interceptor *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*       : (WorldState * RingSubmitterRuntimeState * list Event) := *)
-(*       match __update_orders_broker_interceptor wst0 wst (submitter_rt_orders st) with *)
-(*       | (wst', orders', evts') => *)
-(*         if has_revert_event evts' then *)
-(*           (wst0, st, EvtRevert :: nil) *)
-(*         else *)
-(*           (wst', submitter_update_orders st orders', evts') *)
-(*       end. *)
-
-(*   End UpdateOrdersBrokernAndInterceptor. *)
 
 
 (*   Section GetFilledAndCancelled. *)
