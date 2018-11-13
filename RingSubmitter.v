@@ -17,40 +17,6 @@ Require Import
 Open Scope bool_scope.
 
 
-Parameters get_order_hash: Order -> bytes32.
-
-Section HashAxioms.
-
-  Definition get_order_hash_preimg (order: Order) :=
-    (order_allOrNone order,
-     order_tokenBFeePercentage order,
-     order_tokenSFeePercentage order,
-     order_feePercentage order,
-     order_walletSplitPercentage order,
-     order_feeToken order,
-     order_tokenRecipient order,
-     order_wallet order,
-     order_orderInterceptor order,
-     order_broker order,
-     order_dualAuthAddr order,
-     order_tokenB order,
-     order_tokenS order,
-     order_owner order,
-     order_validUntil order,
-     order_validSince order,
-     order_feeAmount order,
-     order_amountB order,
-     order_amountS order).
-
-  Axiom order_hash_dec:
-    forall (ord ord': Order),
-      let preimg := get_order_hash_preimg ord in
-      let preimg' := get_order_hash_preimg ord' in
-      (preimg = preimg' -> get_order_hash ord = get_order_hash ord') /\
-      (preimg <> preimg' -> get_order_hash ord <> get_order_hash ord').
-
-End HashAxioms.
-
 Module SpendableElem <: ElemType.
   Definition elt := Spendable.
   Definition elt_zero := mk_spendable false O O.
@@ -467,6 +433,66 @@ Module RingSubmitter.
 
   End RunTimeState.
 
+  Parameters get_order_hash: Order -> bytes32.
+  Parameters get_ring_hash: Ring -> list OrderRuntimeState -> bytes32.
+
+  Section HashAxioms.
+
+    Definition get_order_hash_preimg (order: Order) :=
+      (order_allOrNone order,
+       order_tokenBFeePercentage order,
+       order_tokenSFeePercentage order,
+       order_feePercentage order,
+       order_walletSplitPercentage order,
+       order_feeToken order,
+       order_tokenRecipient order,
+       order_wallet order,
+       order_orderInterceptor order,
+       order_broker order,
+       order_dualAuthAddr order,
+       order_tokenB order,
+       order_tokenS order,
+       order_owner order,
+       order_validUntil order,
+       order_validSince order,
+       order_feeAmount order,
+       order_amountB order,
+       order_amountS order).
+
+    Axiom order_hash_dec:
+      forall (ord ord': Order),
+        let preimg := get_order_hash_preimg ord in
+        let preimg' := get_order_hash_preimg ord' in
+        (preimg = preimg' -> get_order_hash ord = get_order_hash ord') /\
+        (preimg <> preimg' -> get_order_hash ord <> get_order_hash ord').
+
+    Fixpoint __get_ring_hash_preimg
+             (indices: list nat) (orders: list OrderRuntimeState)
+      : list (option (bytes32 * int16)):=
+      match indices with
+      | nil => nil
+      | idx :: indices' =>
+        let preimg := match nth_error orders idx with
+                      | None => None
+                      | Some order => Some (ord_rt_hash order,
+                                           order_waiveFeePercentage (ord_rt_order order))
+                      end
+        in preimg :: __get_ring_hash_preimg indices' orders
+      end.
+
+    Definition get_ring_hash_preimg
+               (r: Ring) (orders: list OrderRuntimeState) :=
+      __get_ring_hash_preimg (ring_orders r) orders.
+
+    Axiom ring_hash_dec:
+      forall (r r': Ring) (orders orders': list OrderRuntimeState),
+        let preimg := get_ring_hash_preimg r orders in
+        let preimg' := get_ring_hash_preimg r' orders' in
+        (preimg = preimg' -> get_ring_hash r orders = get_ring_hash r' orders') /\
+        (preimg <> preimg' -> get_ring_hash r orders <> get_ring_hash r' orders').
+
+  End HashAxioms.
+
   Section SubSpec.
 
     Record SubSpec :=
@@ -783,6 +809,41 @@ Module RingSubmitter.
 
     End CheckOrders.
 
+    Section UpdateRingsHashes.
+
+      Fixpoint update_rings_hash
+               (rings: list RingRuntimeState) (orders: list OrderRuntimeState)
+      : list RingRuntimeState :=
+        match rings with
+        | nil => nil
+        | r :: rings' =>
+          upd_ring_hash r (get_ring_hash (ring_rt_static r) orders) ::
+          update_rings_hash rings' orders
+        end.
+
+      Definition update_rings_hash_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = submitter_update_rings
+                      st
+                      (update_rings_hash
+                         (submitter_rt_rings st) (submitter_rt_orders st));
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End UpdateRingsHashes.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -844,7 +905,8 @@ Module RingSubmitter.
            update_orders_hashes_subspec ;;
            update_orders_brokers_and_interceptors ;;
            get_filled_and_check_cancelled_subspec ;;
-           check_orders_subspec
+           check_orders_subspec ;;
+           update_rings_hash_subspec
         )
         sender orders rings mining.
 
@@ -866,57 +928,6 @@ Module RingSubmitter.
     fspec_sat (get_spec msg) wst wst' retval events.
 
 End RingSubmitter.
-
-
-(*   (* Again, we use an abstract function to model the calculation of ring hash. *) *)
-(*   Context `{ring_hash: RingRuntimeState -> list OrderRuntimeState -> bytes32}. *)
-
-(*   Fixpoint __get_ring_hash_preimg *)
-(*            (ps: list Participation) (orders: list OrderRuntimeState) *)
-(*     : list (option (bytes32 * int16)):= *)
-(*     match ps with *)
-(*     | nil => nil *)
-(*     | p :: ps' => *)
-(*       let ord_idx := part_order_idx p in *)
-(*       let preimg := match nth_error orders ord_idx with *)
-(*                     | None => None *)
-(*                     | Some order => Some (ord_rt_hash order, *)
-(*                                          order_waiveFeePercentage (ord_rt_order order)) *)
-(*                     end *)
-(*       in preimg :: __get_ring_hash_preimg ps' orders *)
-(*     end. *)
-
-(*   Definition get_ring_hash_preimg *)
-(*              (st: RingRuntimeState) (orders: list OrderRuntimeState) *)
-(*     : list (option (bytes32 * int16)):= *)
-(*     __get_ring_hash_preimg (ring_rt_participations st) orders. *)
-
-(*   Context `{ring_hash_dec: forall (r r': RingRuntimeState) (orders: list OrderRuntimeState), *)
-(*               (get_ring_hash_preimg r orders = get_ring_hash_preimg r' orders -> *)
-(*                ring_hash r orders = ring_hash r' orders) /\ *)
-(*               (get_ring_hash_preimg r orders <> get_ring_hash_preimg r' orders -> *)
-(*                ring_hash r orders <> ring_hash r' orders)}. *)
-
-(*   Section UpdateRingsHash. *)
-
-(*     Fixpoint __update_rings_hash *)
-(*              (rings: list RingRuntimeState) (orders: list OrderRuntimeState) *)
-(*     : list RingRuntimeState := *)
-(*       match rings with *)
-(*       | nil => nil *)
-(*       | r :: rings' => *)
-(*         upd_ring_hash r (ring_hash r orders) :: __update_rings_hash rings' orders *)
-(*       end. *)
-
-(*     Definition update_rings_hash *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*       : WorldState * RingSubmitterRuntimeState * (list Event) := *)
-(*       (wst, *)
-(*        submitter_update_rings *)
-(*          st (__update_rings_hash (submitter_rt_rings st) (submitter_rt_orders st)), *)
-(*        nil). *)
-
-(*   End UpdateRingsHash. *)
 
 
 (*   Context `{mining_hash: Mining -> list RingRuntimeState -> bytes32}. *)
