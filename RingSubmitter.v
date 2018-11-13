@@ -420,6 +420,48 @@ Module RingSubmitter.
 
   Section SubmitRings.
 
+    Section UpdateOrdersHashes.
+
+      Fixpoint update_orders_hashes
+               (orders: list OrderRuntimeState)
+      : list OrderRuntimeState :=
+        match orders with
+        | nil => nil
+        | order :: orders' =>
+          let order' := {|
+                ord_rt_order := ord_rt_order order;
+                ord_rt_p2p := ord_rt_p2p order;
+                ord_rt_hash := get_order_hash (ord_rt_order order);
+                ord_rt_brokerInterceptor := ord_rt_brokerInterceptor order;
+                ord_rt_filledAmountS := ord_rt_filledAmountS order;
+                ord_rt_initialFilledAmountS := ord_rt_initialFilledAmountS order;
+                ord_rt_valid := ord_rt_valid order;
+              |}
+          in order' :: update_orders_hashes orders'
+        end.
+
+      Definition update_orders_hashes_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = submitter_update_orders
+                      st (update_orders_hashes (submitter_rt_orders st));
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End UpdateOrdersHashes.
+
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -475,17 +517,9 @@ Module RingSubmitter.
     Definition submitRings_spec
                (sender: address)
                (orders: list Order) (rings: list Ring) (mining: Mining) :=
-      (* TODO: to be defined *)
-      {|
-        fspec_require :=
-          fun wst => True;
-
-        fspec_trans :=
-          fun wst wst' retval => True;
-
-        fspec_events :=
-          fun wst events => True;
-      |}.
+      submit_rings_subspec_to_fspec
+        update_orders_hashes_subspec
+        sender orders rings mining.
 
   End SubmitRings.
 
