@@ -435,6 +435,7 @@ Module RingSubmitter.
 
   Parameters get_order_hash: Order -> bytes32.
   Parameters get_ring_hash: Ring -> list OrderRuntimeState -> bytes32.
+  Parameter get_mining_hash: Mining -> list RingRuntimeState -> bytes32.
 
   Section HashAxioms.
 
@@ -490,6 +491,23 @@ Module RingSubmitter.
         let preimg' := get_ring_hash_preimg r' orders' in
         (preimg = preimg' -> get_ring_hash r orders = get_ring_hash r' orders') /\
         (preimg <> preimg' -> get_ring_hash r orders <> get_ring_hash r' orders').
+
+    Fixpoint rings_hashes (rings: list RingRuntimeState) : list bytes32 :=
+      match rings with
+      | nil => nil
+      | r :: rings' => ring_rt_hash r :: rings_hashes rings'
+      end.
+
+    Definition get_mining_hash_preimg
+               (mining: Mining) (rings: list RingRuntimeState) :=
+      (mining_miner mining, mining_feeRecipient mining, rings_hashes rings).
+
+    Axiom mining_hash_dec:
+      forall (m m': Mining) (rings rings': list RingRuntimeState),
+        let preimg := get_mining_hash_preimg m rings in
+        let preimg' := get_mining_hash_preimg m' rings' in
+        (preimg = preimg' -> get_mining_hash m rings = get_mining_hash m' rings') /\
+        (preimg <> preimg' -> get_mining_hash m rings <> get_mining_hash m' rings').
 
   End HashAxioms.
 
@@ -844,6 +862,36 @@ Module RingSubmitter.
 
     End UpdateRingsHashes.
 
+    Section UpdateMiningHash.
+
+      Definition update_mining_hash
+                 (mining: MiningRuntimeState) (rings: list RingRuntimeState)
+      : MiningRuntimeState :=
+        upd_mining_hash mining (get_mining_hash (mining_rt_static mining) rings).
+
+      Definition update_mining_hash_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = submitter_update_mining
+                      st
+                      (update_mining_hash
+                         (submitter_rt_mining st) (submitter_rt_rings st));
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End UpdateMiningHash.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -906,7 +954,8 @@ Module RingSubmitter.
            update_orders_brokers_and_interceptors ;;
            get_filled_and_check_cancelled_subspec ;;
            check_orders_subspec ;;
-           update_rings_hash_subspec
+           update_rings_hash_subspec ;;
+           update_mining_hash_subspec
         )
         sender orders rings mining.
 
@@ -928,40 +977,6 @@ Module RingSubmitter.
     fspec_sat (get_spec msg) wst wst' retval events.
 
 End RingSubmitter.
-
-
-(*   Context `{mining_hash: Mining -> list RingRuntimeState -> bytes32}. *)
-
-(*   Fixpoint xor_rings_hash (rings: list RingRuntimeState) : bytes32 := *)
-(*     match rings with *)
-(*     | nil => 0 *)
-(*     | r :: rings' => Nat.lxor (ring_rt_hash r) (xor_rings_hash rings') *)
-(*     end. *)
-
-(*   Definition get_mining_hash_preimg *)
-(*              (mining: Mining) (rings: list RingRuntimeState) := *)
-(*     (mining_miner mining, mining_feeRecipient mining, xor_rings_hash (rings)). *)
-
-(*   Context `{mining_hash_dec: forall (m m': Mining) (rings: list RingRuntimeState), *)
-(*                (get_mining_hash_preimg m rings = get_mining_hash_preimg m' rings -> *)
-(*                 mining_hash m rings = mining_hash m' rings) /\ *)
-(*                (get_mining_hash_preimg m rings <> get_mining_hash_preimg m' rings -> *)
-(*                 mining_hash m rings <> mining_hash m' rings)}. *)
-
-
-(*   Section UpdateMiningHash. *)
-
-(*     Definition update_mining_hash *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*     : WorldState * RingSubmitterRuntimeState * list Event := *)
-(*       let mining := submitter_rt_mining st in *)
-(*       let rings := submitter_rt_rings st in *)
-(*       (wst, *)
-(*        submitter_update_mining *)
-(*          st (upd_mining_hash mining (mining_hash (mining_rt_static mining) rings)), *)
-(*        nil). *)
-
-(*   End UpdateMiningHash. *)
 
 
 (*   Section UpdateMinerAndInterceptor. *)
