@@ -923,6 +923,46 @@ Module RingSubmitter.
 
     End UpdateMinerAndInterceptor.
 
+    Parameter verify_signature: address -> bytes32 -> bytes -> Prop.
+
+    Section CheckMinerSignature.
+
+      Inductive miner_signature_valid
+                (mining: MiningRuntimeState) (sender: address) : Prop :=
+      | MinerSigValid_nosig:
+          mining_sig (mining_rt_static mining) = nil ->
+          mining_miner (mining_rt_static mining) = sender ->
+          miner_signature_valid mining sender
+
+      | MinerSigValid_sig:
+          let sig := mining_sig (mining_rt_static mining) in
+          sig <> nil ->
+          verify_signature (mining_miner (mining_rt_static mining))
+                           (mining_rt_hash mining)
+                           sig ->
+          miner_signature_valid mining sender
+      .
+
+      Definition check_miner_signature_subspec
+                 (sender: address)
+                 (_orders: list Order)
+                 (_rings: list Ring)
+                 (_mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st =>
+              miner_signature_valid (submitter_rt_mining st) sender;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\ st' = st;
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End CheckMinerSignature.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -987,7 +1027,8 @@ Module RingSubmitter.
            check_orders_subspec ;;
            update_rings_hash_subspec ;;
            update_mining_hash_subspec ;;
-           update_miner_interceptor_subspec
+           update_miner_interceptor_subspec ;;
+           check_miner_signature_subspec
         )
         sender orders rings mining.
 
@@ -1012,29 +1053,6 @@ End RingSubmitter.
 
 
 
-(*   Context `{verify_signature: address -> bytes32 -> bytes -> bool}. *)
-
-(*   Section CheckMinerSignature. *)
-
-(*     Definition check_miner_signature *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*     : WorldState * RingSubmitterRuntimeState * list Event := *)
-(*       let mining := submitter_rt_mining st in *)
-(*       let static_mining := mining_rt_static mining in *)
-(*       let miner := mining_miner static_mining in *)
-(*       let sig := mining_sig static_mining in *)
-(*       match sig with *)
-(*       | nil => if Nat.eqb sender miner then *)
-(*                 (wst, st, nil) *)
-(*               else *)
-(*                 (wst0, st, EvtRevert :: nil) *)
-(*       | _ => if verify_signature miner (mining_rt_hash mining) sig then *)
-(*               (wst, st, nil) *)
-(*             else *)
-(*               (wst0, st, EvtRevert :: nil) *)
-(*       end. *)
-
-(*   End CheckMinerSignature. *)
 
 
 (*   Section CheckOrdersDualSig. *)
