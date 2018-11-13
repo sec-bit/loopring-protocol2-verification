@@ -892,6 +892,37 @@ Module RingSubmitter.
 
     End UpdateMiningHash.
 
+    Section UpdateMinerAndInterceptor.
+
+    Definition update_miner_interceptor (st: RingSubmitterRuntimeState) :=
+      let mining := submitter_rt_mining st in
+      let static_mining := mining_rt_static mining in
+      match mining_miner static_mining with
+      | O => submitter_update_mining
+              st (upd_mining_miner mining (mining_feeRecipient static_mining))
+      | _ => st
+      end.
+
+      Definition update_miner_interceptor_subspec
+                 (sender: address)
+                 (_orders: list Order)
+                 (_rings: list Ring)
+                 (_mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = update_miner_interceptor st;
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End UpdateMinerAndInterceptor.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -955,7 +986,8 @@ Module RingSubmitter.
            get_filled_and_check_cancelled_subspec ;;
            check_orders_subspec ;;
            update_rings_hash_subspec ;;
-           update_mining_hash_subspec
+           update_mining_hash_subspec ;;
+           update_miner_interceptor_subspec
         )
         sender orders rings mining.
 
@@ -978,22 +1010,6 @@ Module RingSubmitter.
 
 End RingSubmitter.
 
-
-(*   Section UpdateMinerAndInterceptor. *)
-
-(*     Definition update_miner_interceptor *)
-(*                (wst0 wst: WorldState) (sender: address) (st: RingSubmitterRuntimeState) *)
-(*     : WorldState * RingSubmitterRuntimeState * list Event := *)
-(*       let mining := submitter_rt_mining st in *)
-(*       let static_mining := mining_rt_static mining in *)
-(*       match mining_miner static_mining with *)
-(*       | O => (wst, *)
-(*              submitter_update_mining st (upd_mining_miner mining (mining_feeRecipient static_mining)), *)
-(*              nil) *)
-(*       | _ => (wst, st, nil) *)
-(*       end. *)
-
-(*   End UpdateMinerAndInterceptor. *)
 
 
 (*   Context `{verify_signature: address -> bytes32 -> bytes -> bool}. *)
