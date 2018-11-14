@@ -373,8 +373,8 @@ Module TradeDelegate.
                (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
     : bool :=
       (* TODO: to be defined *)
-      if (AH2B.get (delegate_cancelled st) (broker, hash)) then true else
-      false.
+      if (AH2B.get (delegate_cancelled st) (broker, hash)) then false else
+      true.
 
     Fixpoint build_fills
              (st: TradeDelegateState) (params: list OrderParam)

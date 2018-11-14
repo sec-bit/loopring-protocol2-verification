@@ -28,6 +28,8 @@ Inductive Event : Type :=
 | EvtAllBrokersUnregistered (owner: address)
 (* OrderRegistry events *)
 | EvtOrderRegistered (owner: address) (hash: bytes32)
+(* TODO Loopring protocol events *)
+| EvtOwnershipTransferred (owner dest: address)
 (* to be defined *)
 .
 
