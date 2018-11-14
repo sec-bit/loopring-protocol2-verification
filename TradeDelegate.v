@@ -72,16 +72,34 @@ Module TradeDelegate.
   Section DeauthorizeAddress.
 
     Definition deauthorizeAddress_spec (sender addr: address) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+                let st := wst_trade_delegate_state wst in
+                is_owner st sender /\ addr <> 0 /\ is_authorized_address st sender;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                    wst
+                    {|
+                        delegate_owner := delegate_owner st;
+                        delegate_suspended := delegate_suspended st; 
+                        (*delegate_authorizedAddresses := remove (Nat.eq_dec) addr delegate_authorizedAddresses st;*)(*TODO remove函数使用是否正确，为什么没有positionMap*)
+                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                        delegate_filled := delegate_filled st;
+                        delegate_cancelled := delegate_cancelled st;
+                        delegate_cutoffs := delegate_cutoffs st;
+                        delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                        delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                        delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                    |} /\
+            retval = RetNone;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            events = EvtAddressDeauthorized addr :: nil;
       |}.
 
   End DeauthorizeAddress.
@@ -355,6 +373,7 @@ Module TradeDelegate.
                (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
     : bool :=
       (* TODO: to be defined *)
+      if (AH2B.get (delegate_cancelled st) (broker, hash)) then true else
       false.
 
     Fixpoint build_fills
@@ -395,16 +414,33 @@ Module TradeDelegate.
   Section Suspend.
 
     Definition suspend_spec (sender: address) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            is_owner st sender /\ is_not_suspended st;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+                        wst
+                        {|
+                            delegate_owner := delegate_owner st;
+                            delegate_suspended := true; (*TODO 如何更新一个值 使用upd?*)
+                            delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                            delegate_filled := delegate_filled st;
+                            delegate_cancelled :=delegate_cancelled st;
+                            delegate_cutoffs := delegate_cutoffs st;
+                            delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                            delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                            delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                        |} /\
+            retval = RetNone;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            events = nil;
       |}.
 
   End Suspend.
@@ -415,13 +451,31 @@ Module TradeDelegate.
       (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            is_owner st sender /\ ~ is_not_suspended st;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+              wst
+              {|
+                 delegate_owner := delegate_owner st;
+                 delegate_suspended := false; (*TODO 如何更新一个值 使用upd?*)
+                 delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                 delegate_filled := delegate_filled st;
+                 delegate_cancelled :=delegate_cancelled st;
+                 delegate_cutoffs := delegate_cutoffs st;
+                 delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                 delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                 delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+              |} /\
+              retval = RetNone;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            events = nil;
       |}.
 
   End Resume.
@@ -429,16 +483,34 @@ Module TradeDelegate.
   Section Kill.
 
     Definition kill_spec (sender: address) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            let st := wst_trade_delegate_state wst in
+            is_owner st sender /\ ~ is_not_suspended st;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            let st := wst_trade_delegate_state wst in
+            wst' = wst_update_trade_delegate
+              wst
+            {|
+                delegate_owner := 0; (*TODO upd?*)
+                delegate_suspended := delegate_suspended st;
+                delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                delegate_filled := delegate_filled st;
+                delegate_cancelled :=delegate_cancelled st;
+                delegate_cutoffs := delegate_cutoffs st;
+                delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+            |} /\
+            retval = RetNone;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            let st := wst_trade_delegate_state wst in
+            events = (EvtOwnershipTransferred (delegate_owner st) 0) :: nil; (*TODO emit event?*)
       |}.
 
   End Kill.
