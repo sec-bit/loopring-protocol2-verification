@@ -54,9 +54,9 @@ Record Mining: Type :=
 (** Spendable *)
 Record Spendable : Type :=
   mk_spendable {
-      initialized: bool;
-      amount: uint;
-      reserved: uint;
+      spendable_initialized: bool;
+      spendable_amount: uint;
+      spendable_reserved: uint;
     }.
 
 

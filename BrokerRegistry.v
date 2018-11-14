@@ -58,8 +58,8 @@ Module BrokerRegistry.
           fun wst wst' retval =>
             wst' = wst /\
             retval = match get_broker_info (get_brokersMap wst) owner broker with
-                     | None => RetGetBroker false 0
-                     | Some broker_info => RetGetBroker true (broker_interceptor broker_info)
+                     | None => RetBrokerInterceptor None
+                     | Some broker_info => RetBrokerInterceptor (Some (broker_interceptor broker_info))
                      end
         ;
 
