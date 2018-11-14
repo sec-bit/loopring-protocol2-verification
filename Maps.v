@@ -149,6 +149,8 @@ End BoolElem.
 (** Concrete Mapping Types *)
 (* Address -> Nat *)
 Module A2V := Mapping Address_as_DT ValElem.
+(* Address -> Bool *)
+Module A2B := Mapping Address_as_DT BoolElem.
 (* (Address, Address) -> Nat *)
 Module AA2V := Mapping AA_as_DT ValElem.
 (* bytes20 -> Nat *)
