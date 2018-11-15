@@ -176,17 +176,27 @@ Module TradeDelegate.
   End BatchTransfer.
 
   Section BatchUpdateFilled.
-    (*
-    Fixpoint update_fills
-        (st: TradeDelegateState) (params: list FilledParam)
-        :=
-        match params with
-        | nil => nil
-        | param :: params' =>
-                 (H2V.upd (delegate_filled st) (filled_order_hash param) (filled_amount param)) 
-                ->  update_fills st params'
-        end.
 
+    Fixpoint update_fills
+             (st: TradeDelegateState) (params: list FilledParam)
+    : TradeDelegateState :=
+      match params with
+      | nil => st
+      | param :: params' =>
+        let st' :=
+            {|
+              delegate_owner := delegate_owner st;
+              delegate_suspended := delegate_suspended st;
+              delegate_authorizedAddresses := delegate_authorizedAddresses st;
+              delegate_filled := H2V.upd (delegate_filled st) (filled_order_hash param) (filled_amount param);
+              delegate_cancelled := delegate_cancelled st;
+              delegate_cutoffs := delegate_cutoffs st;
+              delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+              delegate_cutoffsOwner := delegate_cutoffsOwner st;
+              delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+            |} in
+        update_fills st' params'
+      end.
 
     Definition batchUpdateFilled_spec (sender: address) (params: list FilledParam) :=
       {|
@@ -197,13 +207,13 @@ Module TradeDelegate.
         fspec_trans :=
           fun wst wst' retval =>
             retval = RetNone /\
-            update_fills (wst_trade_delegate_state wst) params -> wst' = wst';
+            wst' = wst_update_trade_delegate wst (update_fills (wst_trade_delegate_state wst) params);
 
         fspec_events :=
           fun wst events =>
             events = nil;
       |}.
-    *)
+
   End BatchUpdateFilled.
 
   Section SetCancelled.
