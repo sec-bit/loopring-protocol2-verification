@@ -176,20 +176,34 @@ Module TradeDelegate.
   End BatchTransfer.
 
   Section BatchUpdateFilled.
+    (*
+    Fixpoint update_fills
+        (st: TradeDelegateState) (params: list FilledParam)
+        :=
+        match params with
+        | nil => nil
+        | param :: params' =>
+                 (H2V.upd (delegate_filled st) (filled_order_hash param) (filled_amount param)) 
+                ->  update_fills st params'
+        end.
+
 
     Definition batchUpdateFilled_spec (sender: address) (params: list FilledParam) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            authorized_and_nonsuspended (wst_trade_delegate_state wst) sender;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            retval = RetNone /\
+            update_fills (wst_trade_delegate_state wst) params -> wst' = wst';
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            events = nil;
       |}.
-
+    *)
   End BatchUpdateFilled.
 
   Section SetCancelled.

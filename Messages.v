@@ -35,7 +35,7 @@ Section TradeDelegate.
       }.
 
   Record FilledParam : Type :=
-    mk_fiiled_param {
+    mk_filled_param {
         filled_order_hash: bytes20;
         filled_amount: uint;
       }.
