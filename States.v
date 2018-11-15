@@ -68,7 +68,7 @@ Record TradeDelegateState : Type :=
   mk_trade_delegate_state {
       delegate_owner: address;
       delegate_suspended: bool;
-      delegate_authorizedAddresses: list address;
+      delegate_authorizedAddresses: A2B.t;
       delegate_filled: H2V.t;
       delegate_cancelled: AH2B.t;
       delegate_cutoffs: A2V.t;
