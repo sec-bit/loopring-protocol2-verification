@@ -20,9 +20,8 @@ Module FeeHolder.
   Section Aux.
 
     Definition wst_before_transfer
-               (wst: WorldState) (sender token: address) (value: uint)
+               (wst: WorldState) (from sender token: address) (value: uint)
     : WorldState :=
-      let from := wst_feeholder_addr wst in
       let st := wst_feeholder_state wst in
       wst_update_feeholder
         wst
@@ -48,59 +47,75 @@ Module FeeHolder.
                             wst' retval events /\
         retval = RetBool true.
 
+    Definition withdraw_require
+               (wst: WorldState) (from sender token: address) (value: uint) :=
+      is_authorized wst sender /\
+      AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
+               (token, from) >= value /\
+      exists wst' events,
+        transfer_withdraw (wst_before_transfer wst from sender token value)
+                          sender token value
+                          wst' events.
+    Definition withdraw_trans
+               (wst wst': WorldState) (retval: RetVal) (from sender token: address) (value: uint) :=
+      retval = RetNone /\
+      forall wst'' events,
+        transfer_withdraw (wst_before_transfer wst from sender token value)
+                          sender token value
+                          wst'' events ->
+        wst' = wst''.
+
+    Definition withdraw_events
+               (wst: WorldState) (events: list Event) (from sender token: address) (value: uint) :=
+      forall wst' events',
+        transfer_withdraw (wst_before_transfer wst from sender token value)
+                          sender token value
+                          wst' events' ->
+        events = events' ++ (EvtTokenWithdrawn from token value :: nil).
+
   End Aux.
 
   Section WithdrawBurned.
 
+    (* withdraw(token, this, msg.sender, value); *)
     Definition withdrawBurned_spec
                (sender token: address) (value: uint) :=
       {|
         fspec_require :=
           fun wst =>
-            is_authorized wst sender /\
-            AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
-                     (token, (wst_feeholder_addr wst)) >= value /\
-            exists wst' events,
-              transfer_withdraw (wst_before_transfer wst sender token value)
-                                sender token value
-                                wst' events
+            withdraw_require wst (wst_feeholder_addr wst) sender token value
         ;
 
         fspec_trans :=
           fun wst wst' retval =>
-            retval = RetNone /\
-            forall wst'' events,
-              transfer_withdraw (wst_before_transfer wst sender token value)
-                                sender token value
-                                wst'' events ->
-              wst' = wst''
+            withdraw_trans wst wst' retval (wst_feeholder_addr wst) sender token value
         ;
 
         fspec_events :=
           fun wst events =>
-            forall wst' events',
-              transfer_withdraw (wst_before_transfer wst sender token value)
-                                sender token value
-                                wst' events' ->
-              events = events' ++ (EvtTokenWithdrawn (wst_feeholder_addr wst) token value :: nil)
-        ;
+            withdraw_events wst events (wst_feeholder_addr wst) sender token value
       |}.
 
   End WithdrawBurned.
 
   Section WithdrawToken.
 
+    (* withdraw(token, msg.sender, msg.sender, value); *)
     Definition withdrawToken_spec (sender token: address) (value: uint) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            withdraw_require wst sender sender token value
+        ;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            withdraw_trans wst wst' retval sender sender token value
+        ;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            withdraw_events wst events sender sender token value
       |}.
 
   End WithdrawToken.
