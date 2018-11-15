@@ -22,7 +22,7 @@ Module TradeDelegate.
 
     Definition is_authorized_address
                (st: TradeDelegateState) (addr: address) : Prop :=
-      A2B.get (delegate_authorizedAddresses st) addr = true.
+      In addr (delegate_authorizedAddresses st).
 
     Definition is_owner (st: TradeDelegateState) (addr: address) : Prop :=
       addr = delegate_owner st.
@@ -53,7 +53,7 @@ Module TradeDelegate.
                      {|
                        delegate_owner := delegate_owner st;
                        delegate_suspended := delegate_suspended st;
-                       delegate_authorizedAddresses := A2B.upd (delegate_authorizedAddresses st) addr true;
+                       delegate_authorizedAddresses := addr :: delegate_authorizedAddresses st;
                        delegate_filled := delegate_filled st;
                        delegate_cancelled := delegate_cancelled st;
                        delegate_cutoffs := delegate_cutoffs st;
@@ -86,8 +86,9 @@ Module TradeDelegate.
                     wst
                     {|
                         delegate_owner := delegate_owner st;
-                        delegate_suspended := delegate_suspended st;
-                        delegate_authorizedAddresses := A2B.upd (delegate_authorizedAddresses st) addr false;
+                        delegate_suspended := delegate_suspended st; 
+                        (*delegate_authorizedAddresses := remove (Nat.eq_dec) addr delegate_authorizedAddresses st;*)(*TODO remove函数使用是否正确，为什么没有positionMap*)
+                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
                         delegate_filled := delegate_filled st;
                         delegate_cancelled := delegate_cancelled st;
                         delegate_cutoffs := delegate_cutoffs st;
@@ -378,24 +379,22 @@ Module TradeDelegate.
        then true
        else false.
 
-    Check is_not_cancelled.
     Definition is_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address) (tokenPair: bytes20)
          :=
          if (Nat.ltb (order_param_validSince param) 
               (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)))
+            || (Nat.ltb (order_param_validSince param) 
+              (A2V.get (delegate_cutoffs st) (broker)))
+            || (Nat.ltb (order_param_validSince param) 
+              (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)))
+            || (Nat.ltb (order_param_validSince param) 
+              (AA2V.get (delegate_cutoffsOwner st) (broker, owner)))
             then false
             else true.
-
-            (*/\ (order_param_validSince param) > (A2V.get (delegate_cutoffs st) (broker))
-          /\ (order_param_validSince param) > (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair))
-          /\ (order_param_validSince param) > (AA2V.get (delegate_cutoffsOwner st) (broker, owner)).*)
-Check is_valid. 
 
     Definition is_not_cancelled_and_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address) 
           (hash tokenPair: bytes20) :=
             is_not_cancelled st broker hash tokenPair && is_valid st param broker owner tokenPair.
-
-   
 
     Fixpoint build_fills
              (st: TradeDelegateState) (params: list OrderParam)
@@ -403,9 +402,9 @@ Check is_valid.
       match params with
       | nil => nil
       | param :: params' =>
-        let fill := (*st (order_param_broker param) (order_param_hash param)(order_param_tradingPair param))*)
+        let fill := 
             if (is_not_cancelled_and_valid)
-                 st (order_param_broker param) (order_param_hash param) (order_param_tradingPair param)
+                 st param (order_param_broker param) (order_param_owner param)(order_param_hash param) (order_param_tradingPair param)
             then
               Some (H2V.get (delegate_filled st) (order_param_hash param))
             else
