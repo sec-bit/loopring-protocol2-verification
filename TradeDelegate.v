@@ -86,9 +86,8 @@ Module TradeDelegate.
                     wst
                     {|
                         delegate_owner := delegate_owner st;
-                        delegate_suspended := delegate_suspended st; 
-                        (*delegate_authorizedAddresses := remove (Nat.eq_dec) addr delegate_authorizedAddresses st;*)(*TODO remove函数使用是否正确，为什么没有positionMap*)
-                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                        delegate_suspended := delegate_suspended st;
+                        delegate_authorizedAddresses := A2B.upd (delegate_authorizedAddresses st) addr false;
                         delegate_filled := delegate_filled st;
                         delegate_cancelled := delegate_cancelled st;
                         delegate_cutoffs := delegate_cutoffs st;
