@@ -122,17 +122,49 @@ Module FeeHolder.
 
   Section BatchAddFeeBalances.
 
+    Definition wst_add_fee
+               (wst: WorldState) (token owner: address) (value: uint)
+      : WorldState :=
+      let st := wst_feeholder_state wst in
+      wst_update_feeholder
+        wst
+        {|
+          feeholder_delegateAddress := feeholder_delegateAddress st;
+          feeholder_feeBalances := AA2V_upd_inc (feeholder_feeBalances st)
+                                                token owner value;
+        |}.
+
+    Fixpoint add_fee
+             (wst: WorldState) (params: list FeeBalanceParam)
+    : WorldState :=
+      match params with
+      | nil => wst
+      | param :: params' =>
+        let wst' :=
+            (wst_add_fee
+               wst
+               (feeblncs_token param)
+               (feeblncs_owner param)
+               (feeblncs_value param))
+        in
+        add_fee wst' params'
+      end.
+
     Definition batchAddFeeBalances_spec
                (sender: address) (params: list FeeBalanceParam) :=
       {|
         fspec_require :=
-          fun wst => True;
+          fun wst =>
+            is_authorized wst sender;
 
         fspec_trans :=
-          fun wst wst' retval => True;
+          fun wst wst' retval =>
+            retval = RetNone /\
+            wst' = add_fee wst params;
 
         fspec_events :=
-          fun wst events => True;
+          fun wst events =>
+            events = nil;
       |}.
 
   End BatchAddFeeBalances.
