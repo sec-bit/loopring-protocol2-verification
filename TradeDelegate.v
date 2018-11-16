@@ -161,7 +161,7 @@ Module TradeDelegate.
             retval = RetNone /\
             forall wst'' events,
               transfer_params wst sender params wst'' events ->
-              wst' = wst'
+              wst' = wst''
         ;
 
         fspec_events :=
