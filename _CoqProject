@@ -9,6 +9,8 @@ OrderRegistry.v
 RingCanceller.v
 RingSubmitter.v
 TradeDelegate.v
+BurnManager.v
+BurnRateTable.v
 
 Events.v
 LibModel.v
