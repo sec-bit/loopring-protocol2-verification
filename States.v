@@ -4,6 +4,8 @@ Require Import
         Maps
         Types.
 
+Require Logic.ProofIrrelevance.
+
 (** State of ERC20 token contract *)
 Record ERC20State : Type :=
   mk_erc20_state {
@@ -16,26 +18,54 @@ Module ERC20StateElem <: ElemType.
   Definition elt_zero :=
     {| erc20_balances := A2V.empty; erc20_allowed := AA2V.empty |}.
   Definition elt_eq := fun (x x': elt) => x = x'.
+  
+  Lemma aa2v_slist_eq_dec (elt: Type) (elt_dec: forall x y: elt, {x = y} + {x <> y}) :
+    forall sl1 sl2 : AA2V.map.slist elt, {sl1 = sl2} + {sl1 <> sl2}.
+  Proof.
+    destruct sl1 as [l1 nodup1], sl2 as [l2 nodup2].
+    assert (forall x y : nat * nat * elt, {x = y} + {x <> y}) as H_dec'.
+    { repeat decide equality. }
+    destruct (list_eq_dec H_dec' l1 l2).
+    left. subst. f_equal. apply ProofIrrelevance.proof_irrelevance.
+    right. intro. apply n. inversion H; auto.
+  Qed.
 
+  Lemma a2v_slist_eq_dec (elt: Type) (elt_dec: forall x y: elt, {x = y} + {x <> y}) :
+    forall sl1 sl2 : A2V.map.slist elt, {sl1 = sl2} + {sl1 <> sl2}.
+  Proof.
+    destruct sl1 as [l1 nodup1], sl2 as [l2 nodup2].
+    assert (forall x y : nat * elt, {x = y} + {x <> y}) as H_dec'.
+    { repeat decide equality. }
+    destruct (list_eq_dec H_dec' l1 l2).
+    left. subst. f_equal. apply ProofIrrelevance.proof_irrelevance.
+    right. intro. apply n. inversion H; auto.
+  Qed.
+  
   Lemma elt_eq_dec:
     forall (x y: elt), { x = y } + { ~ x = y }.
   Proof.
-  Admitted.
+    decide equality.
+    eapply aa2v_slist_eq_dec. decide equality.
+    eapply a2v_slist_eq_dec. decide equality.
+  Qed.
 
   Lemma elt_eq_refl:
     forall x, elt_eq x x.
   Proof.
-  Admitted.
+    constructor.
+  Qed.
 
   Lemma elt_eq_symm:
     forall x y, elt_eq x y -> elt_eq y x.
   Proof.
-  Admitted.
+    inversion 1. constructor.
+  Qed.
 
   Lemma elt_eq_trans:
     forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
   Proof.
-  Admitted.
+    inversion 1; inversion 1; constructor.
+  Qed.
 End ERC20StateElem.
 
 Module ERC20StateMap := Mapping (Address_as_DT) ERC20StateElem.
@@ -103,22 +133,26 @@ Module BrokerElem <: ElemType.
   Lemma elt_eq_dec:
     forall (x y: elt), { x = y } + { ~ x = y }.
   Proof.
-  Admitted.
+    decide equality; decide equality.
+  Qed.
 
   Lemma elt_eq_refl:
     forall x, elt_eq x x.
   Proof.
-  Admitted.
+    constructor.
+  Qed.
 
   Lemma elt_eq_symm:
     forall x y, elt_eq x y -> elt_eq y x.
   Proof.
-  Admitted.
+    inversion 1; constructor.
+  Qed.
 
   Lemma elt_eq_trans:
     forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
   Proof.
-  Admitted.
+    inversion 1; inversion 1; constructor.
+  Qed.
 End BrokerElem.
 
 Module Brokers := Mapping Address_as_DT BrokerElem.
@@ -127,26 +161,41 @@ Module BrokersElem <: ElemType.
   Definition elt := Brokers.t.
   Definition elt_zero := Brokers.empty.
   Definition elt_eq := fun m m': elt => Brokers.map.Equal m m'.
+  
+  Lemma slist_eq_dec (elt: Type) (elt_dec: forall x y: elt, {x = y} + {x <> y}) :
+    forall sl1 sl2 : Brokers.map.slist elt, {sl1 = sl2} + {sl1 <> sl2}.
+  Proof.
+    destruct sl1 as [l1 nodup1], sl2 as [l2 nodup2].
+    assert (forall x y : nat * elt, {x = y} + {x <> y}) as H_dec'.
+    { repeat decide equality. }
+    destruct (list_eq_dec H_dec' l1 l2).
+    left. subst. f_equal. apply ProofIrrelevance.proof_irrelevance.
+    right. intro. apply n. inversion H; auto.
+  Qed.
 
   Lemma elt_eq_dec:
     forall (x y: elt), { x = y } + { ~ x = y }.
   Proof.
-  Admitted.
+    apply slist_eq_dec. auto using BrokerElem.elt_eq_dec.
+  Qed.
 
   Lemma elt_eq_refl:
     forall x, elt_eq x x.
   Proof.
-  Admitted.
+    constructor.
+  Qed.
 
   Lemma elt_eq_symm:
     forall x y, elt_eq x y -> elt_eq y x.
   Proof.
-  Admitted.
+    intros x y H k. rewrite H; auto.
+  Qed.
 
   Lemma elt_eq_trans:
     forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
   Proof.
-  Admitted.
+    intros x y H1 z H2 k. rewrite H1, H2. auto.
+  Qed.
 End BrokersElem.
 
 Module BrokersMap := Mapping Address_as_DT BrokersElem.
@@ -157,7 +206,6 @@ Record BrokerRegistryState : Type :=
         address -> address -> Broker *)
       broker_registry_brokersMap : BrokersMap.t;
     }.
-
 
 
 (** State of order registry *)
