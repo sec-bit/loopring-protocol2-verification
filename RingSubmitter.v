@@ -24,8 +24,7 @@ Module SpendableElem <: ElemType.
 
   Lemma elt_eq_dec:
     forall (x y: elt), { x = y } + { ~ x = y }.
-  Proof.
-  Admitted.
+  Proof. decide equality; decide equality. Qed.
 
   Lemma elt_eq_refl:
     forall x, elt_eq x x.
