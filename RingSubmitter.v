@@ -430,6 +430,70 @@ Module RingSubmitter.
         mining_rt_interceptor := mining_rt_interceptor m;
       |}.
 
+    Definition upd_part_fillAmounts
+               (p: Participation) (amountS amountB: uint)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := part_splitS      p;
+        part_feeAmount   := part_feeAmount   p;
+        part_feeAmountS  := part_feeAmountS  p;
+        part_feeAmountB  := part_feeAmountB  p;
+        part_rebateFee   := part_rebateFee   p;
+        part_rebateS     := part_rebateS     p;
+        part_rebateB     := part_rebateB     p;
+        part_fillAmountS := amountS;
+        part_fillAmountB := amountB;
+      |}.
+
+    Definition upd_part_splitS
+               (p: Participation) (amount: uint)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := amount;
+        part_feeAmount   := part_feeAmount   p;
+        part_feeAmountS  := part_feeAmountS  p;
+        part_feeAmountB  := part_feeAmountB  p;
+        part_rebateFee   := part_rebateFee   p;
+        part_rebateS     := part_rebateS     p;
+        part_rebateB     := part_rebateB     p;
+        part_fillAmountS := part_fillAmountS p;
+        part_fillAmountB := part_fillAmountB p;
+      |}.
+
+    Definition upd_part_feeAmounts
+               (p: Participation) (amount amountS amountB: uint)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := part_splitS      p;
+        part_feeAmount   := amount;
+        part_feeAmountS  := amountS;
+        part_feeAmountB  := amountB;
+        part_rebateFee   := part_rebateFee   p;
+        part_rebateS     := part_rebateS     p;
+        part_rebateB     := part_rebateB     p;
+        part_fillAmountS := part_fillAmountS p;
+        part_fillAmountB := part_fillAmountB p;
+      |}.
+
+    Definition upd_part_rebates
+               (p: Participation) (amount amountS amountB: uint)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := part_splitS      p;
+        part_feeAmount   := part_feeAmount   p;
+        part_feeAmountS  := part_feeAmountS  p;
+        part_feeAmountB  := part_feeAmountB  p;
+        part_rebateFee   := amount;
+        part_rebateS     := amountS;
+        part_rebateB     := amountB;
+        part_fillAmountS := part_fillAmountS p;
+        part_fillAmountB := part_fillAmountB p;
+      |}.
+
   End RunTimeState.
 
   Parameters get_order_hash: Order -> bytes32.
