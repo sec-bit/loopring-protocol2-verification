@@ -1079,6 +1079,49 @@ Module RingSubmitter.
 
     End CheckOrdersDualSig.
 
+    Section CalculateFillsAndFees.
+
+      Definition ring_orders_valid
+                 (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
+        ring_rt_valid r = true /\
+        let ps := ring_rt_participations r in
+        1 < length ps <= 8 /\
+        forall p,
+          In p ps ->
+          let ord_idx := part_order_idx p in
+          forall order,
+            nth_error orders ord_idx = Some order ->
+            ord_rt_valid order = true.
+
+      Definition ring_has_subrings
+                 (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
+        exists p p',
+          p <> p' /\
+          In p (ring_rt_participations r) /\
+          In p' (ring_rt_participations r) /\
+          forall ord ord',
+            nth_error orders (part_order_idx p) = Some ord ->
+            nth_error orders (part_order_idx p') = Some ord' ->
+            order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
+
+      Definition calc_fills_and_fees_subspec
+                 (sender: address)
+                 (_orders: list Order)
+                 (_rings: list Ring)
+                 (_mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' => True;
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End CalculateFillsAndFees.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
