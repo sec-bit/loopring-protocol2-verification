@@ -99,6 +99,7 @@ Section ERC20.
   | msg_transfer (sender token to: address) (value: uint)
   | msg_transferFrom (sender token from to: address) (value: uint)
   | msg_approve (sender token spender: address) (value: uint)
+  | msg_burnFrom (sender token from: address) (value: uint)
   .
 
 End ERC20.
@@ -128,6 +129,21 @@ Section OrderRegistry.
 
 End OrderRegistry.
 
+Section BurnRateTable.
+
+  Inductive BurnRateTableMsg : Type :=
+  | msg_getBurnRate (sender: address) (token: address)
+  | msg_getTokenTier (sender: address) (token: address)
+  | msg_upgradeTokenTier (sender: address) (token: address)
+  (* [getRebateRate], 
+   [lock], 
+   [withdraw], 
+   [getBalance], 
+   [getWithdrawablebalance],  
+   [getLockStartTime]
+   are not implemented *).
+
+End BurnRateTable.
 
 Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
@@ -137,5 +153,6 @@ Inductive Message : Type :=
 | MsgERC20 (msg: ERC20Msg)
 | MsgBrokerRegistry (msg: BrokerRegistryMsg)
 | MsgOrderRegistry (msg: OrderRegistryMsg)
+| MsgBurnRateTable (msg: BurnRateTableMsg)
 (* TODO: add messages of other LPSC contracts *)
 .

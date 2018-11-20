@@ -47,6 +47,14 @@ Parameter oracle_erc20_approve_spec
     uint    (* param: amount *) ->
     FSpec.
 
+Parameter oracle_erc20_burnFrom_spec
+  : ERC20StateMap.t (* all ERC20 states *) ->
+    address (* ERC20 address*) ->
+    address (* msg.sender *) ->
+    address (* param: from *) ->
+    uint (* param: amount *) ->
+    FSpec.
+
 Module ERC20s.
 
   Definition get_spec (erc20s: ERC20StateMap.t) (msg: ERC20Msg): FSpec :=
@@ -68,6 +76,9 @@ Module ERC20s.
 
     | msg_approve sender token account amount =>
       oracle_erc20_approve_spec erc20s token sender account amount
+
+    | msg_burnFrom sender token from amount =>
+      oracle_erc20_burnFrom_spec erc20s token sender from amount
     end.
 
   Definition model

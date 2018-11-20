@@ -12,76 +12,11 @@ Require Import
 Require Import
         ERC20.
 
-(** * BurnRateTable messages *)
-(** TODO: move to Messages.v *)
-Inductive BurnRateTableMsg : Type :=
-| msg_getBurnRate (sender: address) (token: address)
-| msg_getTokenTier (sender: address) (token: address)
-| msg_upgradeTokenTier (sender: address) (token: address)
-(* [getRebateRate], 
-   [lock], 
-   [withdraw], 
-   [getBalance], 
-   [getWithdrawablebalance],  
-   [getLockStartTime]
-   are not implemented *).
-
-(** * BurnRateTable state *)
-(** TODO: move to State.v *)
 (** Tier definition *)
 Definition TIER1 : uint := 3.
 Definition TIER2 : uint := 2.
 Definition TIER3 : uint := 1.
 Definition TIER4 : uint := 0.
-
-(** Token data map *)
-Record TokenData : Type :=
-  mk_token_data {
-      tier: uint;
-      validUntil: uint;
-    }.
-
-Module TokenDataElem <: ElemType.
-  Definition elt : Type := TokenData.
-  Definition elt_zero : elt := mk_token_data 0 0.
-  Definition elt_eq := fun (x x': elt) => x = x'.
-
-  Lemma elt_eq_dec:
-    forall (x y: elt), { x = y } + { ~ x = y }.
-  Proof. decide equality; decide equality. Qed.
-
-  Lemma elt_eq_refl:
-    forall x, elt_eq x x.
-  Proof.
-    unfold elt_eq; auto.
-  Qed.
-
-  Lemma elt_eq_symm:
-    forall x y, elt_eq x y -> elt_eq y x.
-  Proof.
-    unfold elt_eq; auto.
-  Qed.
-
-  Lemma elt_eq_trans:
-    forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
-  Proof.
-    unfold elt_eq; intros; congruence.
-  Qed.
-
-End TokenDataElem.
-
-Module TokenDataMap := Mapping Address_as_DT TokenDataElem.
-
-(** BurnRateTable state *)
-Record BurnRateTableState : Type :=
-  mk_burn_rate_table_state {
-    burnratetable_tokens: TokenDataMap.t;
-    (* balances not implemented *)
-    }.
-
-(** * Event *)
-(** TODO: move to Events.v *)
-Parameter EvtTokenTierUpgraded : forall (token: address) (TIER: uint), Event.
 
 (** * Constants *)
 Definition BURN_BASE_PERCENTAGE : uint := 100 * 10. (* 100% *)
@@ -111,8 +46,13 @@ Parameter wethAddress : address.
 (** * Auxiliary definitions *)
 
 (** It seems the [BurnRateTableState] should be added to WorldState. *)
-Parameter get_state : WorldState -> BurnRateTableState.
-Parameter set_state : WorldState -> BurnRateTableState -> WorldState.
+Definition get_state (wst : WorldState) : BurnRateTableState :=
+  wst_burn_rate_table_state wst.
+
+Definition set_state : WorldState -> BurnRateTableState -> WorldState :=
+  wst_update_burn_rate_table.
+
+Definition this : WorldState -> address := wst_burn_rate_table_addr.
 
 (** * Method call specs *)
 
@@ -259,8 +199,6 @@ Section upgradeTokenTier_SPEC.
     let tokens' := TokenDataMap.upd tokens token data' in
     (set_state wst (mk_burn_rate_table_state tokens'), data.(tier) + 1) .
                                  
-  (* TODO: add burnFrom to ERC20 model *)
-  Parameter msg_burnFrom : forall (sender: address) (token: address) (amount: uint), ERC20Msg.
   Definition upgradeTokenTier_require (wst: WorldState) : Prop :=
     exists totalSupply wst' evts,
       token <> 0
@@ -272,14 +210,14 @@ Section upgradeTokenTier_SPEC.
       (* TODO: what's the return value of burnFrom? *)
       /\ ERC20s.model wst (msg_totalSupply sender lrcAddress)
                      wst (RetUint totalSupply) nil
-      /\ ERC20s.model wst (msg_burnFrom sender lrcAddress (burnamount totalSupply))
+      /\ ERC20s.model wst (msg_burnFrom (this wst) lrcAddress sender (burnamount totalSupply))
                      wst' (RetBool true) evts.
   
   Inductive upgradeTokenTier_trans (wst : WorldState) : WorldState -> RetVal -> Prop :=
   | upgradeTokenTier_TRANS: forall totalSupply wst' evts TIER wst'' ,
       ERC20s.model wst (msg_totalSupply sender lrcAddress)
                    wst (RetUint totalSupply) nil ->
-      ERC20s.model wst (msg_burnFrom sender lrcAddress (burnamount totalSupply))
+      ERC20s.model wst (msg_burnFrom (this wst) lrcAddress sender (burnamount totalSupply))
                    wst' (RetBool true) evts ->
       upgradetier wst' = (wst'', TIER) ->
       upgradeTokenTier_trans wst wst'' (RetBool true).
@@ -288,7 +226,7 @@ Section upgradeTokenTier_SPEC.
   | upgradeTokenTier_EVENTS: forall totalSupply wst' evts TIER wst'' ,
       ERC20s.model wst (msg_totalSupply sender lrcAddress)
                    wst (RetUint totalSupply) nil ->
-      ERC20s.model wst (msg_burnFrom sender lrcAddress (burnamount totalSupply))
+      ERC20s.model wst (msg_burnFrom (this wst) lrcAddress sender (burnamount totalSupply))
                    wst' (RetBool true) evts ->
       upgradetier wst' = (wst'', TIER) ->
       upgradeTokenTier_events wst (evts ++ EvtTokenTierUpgraded token TIER :: nil).

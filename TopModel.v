@@ -13,7 +13,8 @@ Require Import
         OrderRegistry
         RingSubmitter
         RingCanceller
-        TradeDelegate.
+        TradeDelegate
+        BurnRateTable.
 
 
 (* TODO: to be defined *)
@@ -43,6 +44,9 @@ Definition lr_step
 
   | MsgOrderRegistry msg' =>
     OrderRegistry.model wst msg' wst' retval events
+
+  | MsgBurnRateTable msg' =>
+    BurnRateTable.model wst msg' wst' retval events
   end.
 
 Inductive lr_steps (wst: WorldState) (msgs: list Message)
