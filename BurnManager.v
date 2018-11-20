@@ -20,7 +20,9 @@ Record BurnManagerState : Type :=
   }.
 
 (** The [BurnManagerState] should be added to [WorldState]. *)
-Parameter get_state : WorldState -> option BurnManagerState.
+Parameter get_state : forall (wst: WorldState), BurnManagerState.
+
+Parameter set_state : forall (wst: WorldState) (new_bmst: BurnManagerState), WorldState.
 
 Parameter burn_spec : forall (sender: address) (token: address), FSpec.
 

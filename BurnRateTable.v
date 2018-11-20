@@ -95,7 +95,8 @@ Definition BURN_P2P_TIER4 : uint := 6 * 10. (* 6% *)
 (** What about events? should it be inserted in Events definition? *)
 Parameter EvtTokenTierUpgraded : forall (addr: address) (tier: uint), Event.
 (** It seems the [BurnRateTableState] should be added to WorldState. *)
-Parameter get_state : WorldState -> option BurnRateTableState.
+Parameter get_state : WorldState -> BurnRateTableState.
+Parameter set_state : WorldState -> BurnRateTableState -> WorldState.
 
 (** * Method call specs *)
 Parameter getBurnRate_spec : forall (sender: address) (token: address), FSpec.
