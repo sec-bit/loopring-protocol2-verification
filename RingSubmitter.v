@@ -1570,9 +1570,9 @@ Module RingSubmitter.
                  (ps: list Participation)
                  (orders: list OrderRuntimeState)
         : list Participation :=
-        match adjust_orders_fill_amounts_rev_round_1 ps orders with
+        match adjust_orders_fill_amounts_rev_round_1 (rev ps) orders with
         | (readj_ps, adj_ps) =>
-          adjust_orders_fill_amounts_rev_round_2 readj_ps adj_ps orders
+          rev (adjust_orders_fill_amounts_rev_round_2 readj_ps adj_ps orders)
         end.
 
       Fixpoint _reserve_orders_fillAmountS
