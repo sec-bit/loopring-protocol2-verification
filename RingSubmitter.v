@@ -1411,7 +1411,7 @@ Module RingSubmitter.
           end
         end.
 
-      Definition adjust_order_fill_amounts
+      Definition adjust_orders_fill_amounts
                  (ps: list Participation)
                  (orders: list OrderRuntimeState)
         : list Participation :=
