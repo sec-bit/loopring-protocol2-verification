@@ -994,6 +994,161 @@ Module RingSubmitter.
                           (events' ++ events'')
       .
 
+      Definition update_token_spendables_initialized
+                 (spendables: TokenSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (initialized: bool)
+        : TokenSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := TokenSpendableMap.get spendables (owner, token) in
+        let spendable' := {| spendable_initialized := initialized;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+      Definition update_token_spendables_amount
+                 (spendables: TokenSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (amount: uint)
+        : TokenSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := TokenSpendableMap.get spendables (owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := amount;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+      Definition update_token_spendables_amount_add
+                 (spendables: TokenSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (amount: uint)
+        : TokenSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := TokenSpendableMap.get spendables (owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable + amount;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+      Definition update_token_spendables_reserved
+                 (spendables: TokenSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (reserved: uint)
+        : TokenSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := TokenSpendableMap.get spendables (owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := reserved;
+                          |} in
+        TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+      Definition update_token_spendables_reserved_add
+                 (spendables: TokenSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (reserved: uint)
+        : TokenSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := TokenSpendableMap.get spendables (owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := spendable_reserved spendable + reserved;
+                          |} in
+        TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+      Definition update_broker_spendables_initialized
+                 (spendables: BrokerSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (initialized: bool)
+        : BrokerSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+        let spendable' := {| spendable_initialized := initialized;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+      Definition update_broker_spendables_amount
+                 (spendables: BrokerSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (amount: uint)
+        : BrokerSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := amount;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+      Definition update_broker_spendables_amount_add
+                 (spendables: BrokerSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (amount: uint)
+        : BrokerSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable + amount;
+                             spendable_reserved    := spendable_reserved spendable;
+                          |} in
+        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+      Definition update_broker_spendables_reserved
+                 (spendables: BrokerSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (reserved: uint)
+        : BrokerSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := reserved;
+                          |} in
+        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+      Definition update_broker_spendables_reserved_add
+                 (spendables: BrokerSpendableMap.t)
+                 (ord: OrderRuntimeState)
+                 (reserved: uint)
+        : BrokerSpendableMap.t :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_tokenS order in
+        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+        let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                             spendable_amount      := spendable_amount spendable;
+                             spendable_reserved    := spendable_reserved spendable + reserved;
+                          |} in
+        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
     End GetSpendable.
 
     Section CheckOrders.
