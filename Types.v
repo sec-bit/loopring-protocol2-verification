@@ -103,5 +103,11 @@ Record Ring : Type :=
       ring_minerFeesToOrdersPercentage: uint;
     }.
 
+Definition ring_add_minerFeesToOrdersPercentage (r: Ring) (amount: uint) : Ring :=
+  {|
+    ring_orders := ring_orders r;
+    ring_minerFeesToOrdersPercentage := ring_minerFeesToOrdersPercentage r + amount;
+  |}.
+
 Notation FEE_PERCENTAGE_BASE_N := (1000%nat).
 Notation FEE_PERCENTAGE_BASE_Z := (1000%Z).
