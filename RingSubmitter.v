@@ -1281,6 +1281,14 @@ Module RingSubmitter.
             nth_error orders (part_order_idx p') = Some ord' ->
             order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
 
+      Parameter ring_init_orders_max_fill_amounts:
+        WorldState (* pre world state *) ->
+        RingSubmitterRuntimeState (* pre ring submitter state *) ->
+        uint (* ring index *) ->
+        WorldState (* post world state *) ->
+        RingSubmitterRuntimeState (* post ring submitter state *) ->
+        Prop.
+
       (** Adjust fill amounts of `p` according to fillAmountS of `pp`.
           If `p` is adjust, return an option value of the adjusted `p`.
           Otherwise, return None.
