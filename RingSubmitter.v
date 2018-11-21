@@ -1546,9 +1546,13 @@ Module RingSubmitter.
       Parameter ring_init_orders_max_fill_amounts:
         WorldState (* pre world state *) ->
         RingSubmitterRuntimeState (* pre ring submitter state *) ->
-        uint (* ring index *) ->
+        RingRuntimeState (* ring *) ->
+        list RingRuntimeState (* rings on the left *) ->
+        list RingRuntimeState (* rings on the right *) ->
         WorldState (* post world state *) ->
         RingSubmitterRuntimeState (* post ring submitter state *) ->
+        RingRuntimeState (* post ring state *) ->
+        list Event ->
         Prop.
 
       (** Adjust fill amounts of `p` according to fillAmountS of `pp`.
@@ -1864,9 +1868,9 @@ Module RingSubmitter.
                (st: RingSubmitterRuntimeState)
                (r: RingRuntimeState) (lrings rrings: list RingRuntimeState)
                (pps ps: list Participation)
-        : option RingSubmitterRuntimeState :=
+        : option (RingSubmitterRuntimeState * RingRuntimeState) :=
         match ps with
-        | nil => Some st
+        | nil => Some (st, r)
         | p :: ps' =>
           match get_pp pps ps with
           | None => None (* invalid case *)
@@ -1874,7 +1878,8 @@ Module RingSubmitter.
             match calculate_fees st pp p with
             | None =>
               (** `p` cannot pay fees *)
-              Some (submitter_update_rings st (lrings ++ upd_ring_valid r false :: rrings))
+              let r' := upd_ring_valid r false in
+              Some (submitter_update_rings st (lrings ++ r' :: rrings), r')
             | Some (st', p') =>
               (** `p` can pay fees *)
               let orders := submitter_rt_orders st' in
@@ -1899,10 +1904,19 @@ Module RingSubmitter.
       Fixpoint calc_orders_fees_and_waive
                (st: RingSubmitterRuntimeState)
                (r: RingRuntimeState) (lrings rrings: list RingRuntimeState)
-        : option RingSubmitterRuntimeState :=
-        _calc_orders_fees_and_waive st r lrings rrings nil (ring_rt_participations r).
+        : option (RingSubmitterRuntimeState * RingRuntimeState) :=
+        match _calc_orders_fees_and_waive st r lrings rrings nil (ring_rt_participations r) with
+        | None => None
+        | Some (st', r') =>
+          if Nat.ltb FEE_PERCENTAGE_BASE_N
+                     (ring_minerFeesToOrdersPercentage (ring_rt_static r')) then
+            let r'' := upd_ring_valid r' false in
+            Some (submitter_update_rings st' (lrings ++ r'' :: rrings), r'')
+          else
+            Some (st', r')
+        end.
 
-      Fixpoint _clear_orders_reservations
+      Fixpoint clear_orders_reservations
                (st: RingSubmitterRuntimeState) (ps: list Participation)
         : option RingSubmitterRuntimeState :=
         match ps with
@@ -1910,12 +1924,68 @@ Module RingSubmitter.
         | p :: ps' =>
           match nth_error (submitter_rt_orders st) (part_order_idx p) with
           | None => None (* invalid case *)
-          | Some ord => _clear_orders_reservations
-                         (clear_order_spendables_reserved st ord) ps'
+          | Some ord => clear_orders_reservations (clear_order_spendables_reserved st ord) ps'
           end
         end.
 
+      Definition calculate_fill_amount_and_fee
+                 (wst: WorldState)
+                 (st: RingSubmitterRuntimeState)
+                 (r: RingRuntimeState)
+                 (lrings rrings: list RingRuntimeState)
+                 (wst': WorldState)
+                 (st': RingSubmitterRuntimeState)
+                 (events: list Event) : Prop :=
+        forall wst1 st1 r1 events1
+          wst2 st2 r2 events2
+          wst3 st3 r3 events3
+          wst4 st4 r4 events4
+          wst5 st5 r5 events5,
+          (* init *)
+          ring_init_orders_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 ->
+          (* adjust fill amounts *)
+          r2 = upd_ring_participations
+                   r1
+                   (adjust_orders_fill_amounts (ring_rt_participations r1)
+                                               (submitter_rt_orders st1)) ->
+          st2 = submitter_update_rings st1 (lrings ++ r2 :: rrings) ->
+          wst2 = wst1 ->
+          events2 = nil ->
+          (* reserve fill amountS *)
+          st3 = reserve_orders_fillAmounts st2 r2 ->
+          r3 = r2 ->
+          wst3 = wst2 ->
+          events3 = nil ->
+          (* calc fees and waive *)
+          calc_orders_fees_and_waive st3 r3 lrings rrings = Some (st4, r4) ->
+          wst4 = wst3 ->
+          events4 = nil ->
+          (* clear reservations *)
+          clear_orders_reservations st4 (ring_rt_participations r4) = Some st5 ->
+          r5 = r4 ->
+          wst5 = wst4 ->
+          events5 = nil ->
+          (* final *)
+          wst' = wst5 /\ st' = st5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+
       Definition calc_fills_and_fees_subspec
+                 (sender: address)
+                 (_orders: list Order)
+                 (_rings: list Ring)
+                 (_mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' => True;
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End CalculateFillsAndFees.
+
                  (sender: address)
                  (_orders: list Order)
                  (_rings: list Ring)
