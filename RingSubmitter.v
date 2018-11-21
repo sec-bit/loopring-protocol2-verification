@@ -467,6 +467,22 @@ Module RingSubmitter.
         part_fillAmountB := amountB;
       |}.
 
+    Definition upd_part_fillAmountS
+               (p: Participation) (amountS: uint)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := part_splitS      p;
+        part_feeAmount   := part_feeAmount   p;
+        part_feeAmountS  := part_feeAmountS  p;
+        part_feeAmountB  := part_feeAmountB  p;
+        part_rebateFee   := part_rebateFee   p;
+        part_rebateS     := part_rebateS     p;
+        part_rebateB     := part_rebateB     p;
+        part_fillAmountS := amountS;
+        part_fillAmountB := part_fillAmountB p;
+      |}.
+
     Definition upd_part_splitS
                (p: Participation) (amount: uint)
       : Participation :=
@@ -1612,6 +1628,134 @@ Module RingSubmitter.
           submitter_update_broker_spendables
             (submitter_update_token_spendables st token_spendables')
             broker_spendables'
+        end.
+
+      Definition fee_paid_in_tokenB
+                 (p: Participation) (orders: list OrderRuntimeState) : bool :=
+        match nth_error orders (part_order_idx p) with
+        | None => false (* invalid case *)
+        | Some ord =>
+          let order := ord_rt_order ord in
+          Nat.leb (order_feeAmount order * part_fillAmountS p / order_amountS order)
+                  (part_fillAmountB p) &&
+          Nat.eqb (order_feeToken order)
+                  (order_tokenB order) &&
+          Nat.eqb (order_owner order)
+                  (order_tokenRecipient order)
+        end.
+
+      Parameter order_get_spendableFee: RingSubmitterRuntimeState -> OrderRuntimeState -> uint.
+
+      Definition insufficient_spendable
+                 (st: RingSubmitterRuntimeState)
+                 (p: Participation)
+                 (ord: OrderRuntimeState)
+        : bool :=
+        let order := ord_rt_order ord in
+        Nat.ltb (order_get_spendableFee st ord)
+                (order_feeAmount order * part_fillAmountS p / order_amountS order).
+
+      Definition reserve_order_fee
+                 (st: RingSubmitterRuntimeState)
+                 (ord: OrderRuntimeState)
+                 (amount: uint)
+        : RingSubmitterRuntimeState :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        let token := order_feeToken order in
+        let token_spendables := submitter_rt_token_spendables st in
+        let token_spendables' := update_token_spendables_reserved_add token_spendables ord amount in
+        let broker_spendables := submitter_rt_broker_spendables st in
+        let broker_spendables' :=
+            match ord_rt_brokerInterceptor ord with
+            | O => broker_spendables
+            | _ => update_broker_spendables_reserved_add broker_spendables ord amount
+            end
+        in submitter_update_broker_spendables
+             (submitter_update_token_spendables st token_spendables')
+             broker_spendables'
+      .
+
+      (** Update feeAmount, feeAmountS, feeAmountB and splitS of `p`
+          according to fillAmountB of `pp`. *)
+      Definition calculate_fees
+                 (st: RingSubmitterRuntimeState)
+                 (pp p: Participation) (orders: list OrderRuntimeState)
+        : option (RingSubmitterRuntimeState * Participation) :=
+        match nth_error orders (part_order_idx p) with
+        | None => None (* invalid case *)
+        | Some ord =>
+          let order := ord_rt_order ord in
+          let p_fillAmountS := part_fillAmountS p in
+          let p_fillAmountB := part_fillAmountB p in
+          let pp_fillAmountB := part_fillAmountB pp in
+          match ord_rt_p2p ord with
+          | true =>
+            (** P2P *)
+            let p_feeAmountS := p_fillAmountS * order_tokenSFeePercentage order / FEE_PERCENTAGE_BASE_N in
+            let p_feeAmountB := p_fillAmountB * order_tokenBFeePercentage order / FEE_PERCENTAGE_BASE_N in
+            if Nat.ltb (p_fillAmountS - p_feeAmountS) pp_fillAmountB then
+              (** p does not have sufficient token to sell *)
+              None
+            else
+              (** otherwise ... *)
+              let p_splitS := p_fillAmountS - p_feeAmountS - pp_fillAmountB in
+              Some (st,
+                    upd_part_fillAmountS
+                      (upd_part_splitS
+                         (upd_part_feeAmounts p 0 p_feeAmountS p_feeAmountB)
+                         p_splitS)
+                      (pp_fillAmountB + p_feeAmountS))
+
+          | false =>
+            (** non-P2P *)
+            if fee_paid_in_tokenB p orders then
+              (** feeToken is tokenB ... *)
+              if Nat.ltb p_fillAmountS pp_fillAmountB then
+                (** p does not have sufficient token to sell *)
+                None
+              else
+                (** otherwise ... *)
+                let p_feeAmountB := order_feeAmount order * p_fillAmountS / (order_amountS order) in
+                let p_splitS := p_fillAmountS - pp_fillAmountB in
+                Some (st,
+                      upd_part_splitS
+                        (upd_part_feeAmounts p 0 0 p_feeAmountB)
+                        p_splitS)
+            else
+              (** otherwise ... *)
+              if insufficient_spendable st p ord then
+                (** p does not sufficient feeToken *)
+                if Nat.ltb p_fillAmountS pp_fillAmountB then
+                  (** p dose not have sufficient token to sell *)
+                  None
+                else
+                  (** p can pay fee by tokenB *)
+                  let p_feeAmountB := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
+                  let p_splitS := p_fillAmountS - pp_fillAmountB in
+                  Some (st,
+                        upd_part_fillAmountS
+                          (upd_part_splitS
+                             (upd_part_feeAmounts p 0 0 p_feeAmountB)
+                             p_splitS)
+                          pp_fillAmountB)
+              else
+                (** p has sufficient feeToken *)
+                if Nat.ltb p_fillAmountS p_fillAmountB then
+                  (** p does not have sufficient token to sell *)
+                  None
+                else
+                  (** otherwise ... *)
+                  let p_feeAmount := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
+                  let p_splitS := p_fillAmountS - pp_fillAmountB in
+                  Some (reserve_order_fee st ord p_feeAmount,
+                        upd_part_fillAmountS
+                          (upd_part_splitS
+                             (upd_part_feeAmounts p p_feeAmount 0 0)
+                             p_splitS)
+                          pp_fillAmountB)
+          end
         end.
 
       Definition calc_fills_and_fees_subspec
