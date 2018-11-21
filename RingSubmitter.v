@@ -1575,6 +1575,45 @@ Module RingSubmitter.
           adjust_orders_fill_amounts_rev_round_2 readj_ps adj_ps orders
         end.
 
+      Fixpoint _reserve_orders_fillAmountS
+               (ps: list Participation)
+               (orders: list OrderRuntimeState)
+               (token_spendables: TokenSpendableMap.t)
+               (broker_spendables: BrokerSpendableMap.t)
+        : option (TokenSpendableMap.t * BrokerSpendableMap.t) :=
+        match ps with
+        | nil => Some (token_spendables, broker_spendables)
+        | p :: ps' =>
+          match nth_error orders (part_order_idx p) with
+          | None => None (* invalid case *)
+          | Some ord =>
+            let reserved := part_fillAmountS p in
+            let token_spendables' :=
+                update_token_spendables_reserved_add token_spendables ord reserved in
+            let broker_spendables' :=
+                match ord_rt_brokerInterceptor ord with
+                | O => broker_spendables
+                | _ => update_broker_spendables_reserved_add broker_spendables ord reserved
+                end
+            in _reserve_orders_fillAmountS ps' orders token_spendables' broker_spendables'
+          end
+        end.
+
+      Definition reserve_orders_fillAmounts
+                 (st: RingSubmitterRuntimeState) (r: RingRuntimeState)
+        : RingSubmitterRuntimeState :=
+        match _reserve_orders_fillAmountS (ring_rt_participations r)
+                                          (submitter_rt_orders st)
+                                          (submitter_rt_token_spendables st)
+                                          (submitter_rt_broker_spendables st)
+        with
+        | None => st
+        | Some (token_spendables', broker_spendables') =>
+          submitter_update_broker_spendables
+            (submitter_update_token_spendables st token_spendables')
+            broker_spendables'
+        end.
+
       Definition calc_fills_and_fees_subspec
                  (sender: address)
                  (_orders: list Order)
