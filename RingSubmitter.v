@@ -2005,6 +2005,7 @@ Module RingSubmitter.
                  (lrings rrings: list RingRuntimeState)
                  (wst': WorldState)
                  (st': RingSubmitterRuntimeState)
+                 (r': RingRuntimeState)
                  (events: list Event) : Prop :=
         forall wst1 st1 r1 events1
           wst2 st2 r2 events2
@@ -2036,7 +2037,7 @@ Module RingSubmitter.
           wst5 = wst4 ->
           events5 = nil ->
           (* final *)
-          wst' = wst5 /\ st' = st5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+          wst' = wst5 /\ st' = st5 /\ r' = r5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
 
       Definition adjust_order_state
                  (p: Participation)
@@ -2102,6 +2103,39 @@ Module RingSubmitter.
                   broker_spendables')
         end.
 
+      Inductive _rings_check_and_calc_fills_fees
+                (wst: WorldState)
+                (st: RingSubmitterRuntimeState)
+        : list RingRuntimeState (* rings that have been checked and updated *) ->
+          list RingRuntimeState (* rings that have not been checked and updated *) ->
+          WorldState (* post world state *) ->
+          RingSubmitterRuntimeState (* post ring submitter state *) ->
+          list Event ->
+          Prop :=
+      | RingsCheckAndCalcFillsFees_nil:
+          _rings_check_and_calc_fills_fees wst st (submitter_rt_rings st) nil wst st nil
+
+      | RingsCheckAndCalcFillsFees_valid_cons:
+          forall lrings r rrings wst' st' r' events st'' wst''' st''' events',
+            submitter_rt_rings st = lrings ++ r :: rrings ->
+            ring_orders_valid r (submitter_rt_orders st) ->
+            ~ ring_has_subrings r (submitter_rt_orders st) ->
+            calculate_fill_amount_and_fee wst st r lrings rrings wst' st' r' events ->
+            adjust_orders_state st' r' = Some st'' ->
+            _rings_check_and_calc_fills_fees wst' st'' (lrings ++ r' :: nil) rrings wst''' st''' events' ->
+            _rings_check_and_calc_fills_fees wst st lrings (r :: rrings) wst''' st''' (events ++ events')
+
+      | RingsCheckAndCalcFillsFees_invalid_cons:
+          forall lrings r rrings r' wst'' st'' events,
+            submitter_rt_rings st = lrings ++ r :: rrings ->
+            (~ ring_orders_valid r (submitter_rt_orders st) \/ ring_has_subrings r (submitter_rt_orders st)) ->
+            r' = upd_ring_valid r false ->
+            _rings_check_and_calc_fills_fees
+              wst (submitter_update_rings st (lrings ++ r' :: rrings))
+              (lrings ++ r' :: nil) rrings wst'' st'' events ->
+            _rings_check_and_calc_fills_fees wst st lrings (r :: rrings) wst'' st'' events
+      .
+
       Definition calc_fills_and_fees_subspec
                  (sender: address)
                  (_orders: list Order)
@@ -2112,27 +2146,20 @@ Module RingSubmitter.
             fun wst st => True;
 
           subspec_trans :=
-            fun wst st wst' st' => True;
+            fun wst st wst' st' =>
+              forall wst'' st'' events,
+                _rings_check_and_calc_fills_fees
+                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
+                wst' = wst'' /\ st' = st''
+          ;
 
           subspec_events :=
-            fun wst st events => events = nil;
-        |}.
-
-    End CalculateFillsAndFees.
-
-                 (sender: address)
-                 (_orders: list Order)
-                 (_rings: list Ring)
-                 (_mining: Mining) :=
-        {|
-          subspec_require :=
-            fun wst st => True;
-
-          subspec_trans :=
-            fun wst st wst' st' => True;
-
-          subspec_events :=
-            fun wst st events => events = nil;
+            fun wst st events =>
+              forall wst'' st'' events',
+                _rings_check_and_calc_fills_fees
+                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
+                events = events'
+          ;
         |}.
 
     End CalculateFillsAndFees.
@@ -2203,7 +2230,8 @@ Module RingSubmitter.
            update_mining_hash_subspec ;;
            update_miner_interceptor_subspec ;;
            check_miner_signature_subspec ;;
-           check_orders_dual_sig_subspec
+           check_orders_dual_sig_subspec ;;
+           calc_fills_and_fees_subspec
         )
         sender orders rings mining.
 
