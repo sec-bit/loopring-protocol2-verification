@@ -480,11 +480,11 @@ Admitted.
 
 Theorem only_owner_is_able_to_control_LPSC:
   forall msgs wst' retval events,
-    (** For any execution trace msgs *)
+    (** For any execution trace [msgs] *)
     lr_model msgs wst' retval events ->
     (** If LPSC is not killed during execution *)
     (forall sender, ~ In (MsgKill sender) msgs) ->
-    (** Then any succeeded control msg call is performed by the initial owner *)
+    (** Then any succeeded control message call is performed by the initial owner *)
     (forall msg,
         In (MsgTradeDelegate msg) msgs ->
         TradeDelegateMsgType msg = ControlMsg ->
@@ -503,3 +503,22 @@ Proof.
 Qed.
   
 (** * Only authorized users are able to fill/cancel orders *)
+(** TODO: Should these properties characterized by msg traces instead? *)
+Theorem only_authorized_contracts_are_able_to_fill_or_cancel_orders:
+  forall wst msg wst' retval events,
+    lr_step wst (MsgTradeDelegate msg) wst' retval events ->
+    TradeDelegateMsgType msg = TransactionMsg ->
+    TradeDelegate.TradeDelegate.is_authorized_address
+      (wst_trade_delegate_state wst) (TradeDelegateMsg_sender msg).
+Proof.
+  intros wst msg wst' retval events Hstep HmsgType.
+  destruct msg eqn:Hmsg; destruct Hstep as [Hrequire _];
+    subst; simpl in *; intuition; try discriminate.
+  destruct H. auto.
+  destruct Hrequire. auto.
+  destruct Hrequire. auto.
+  destruct H. auto.
+  destruct H. auto.
+  destruct H. auto.
+  destruct H. auto.
+Qed.
