@@ -422,5 +422,84 @@ Qed.
     
                                                               
 (** * Only owner (of TradeDelegate) is able to suspend/resume/kill LPSC *)
+Lemma TradeDelegate_ControlMsg_sender_is_owner:
+  forall wst msg wst' retval events,
+    TradeDelegate.TradeDelegate.model wst msg wst' retval events ->
+    TradeDelegateMsgType msg = ControlMsg ->
+    TradeDelegateMsg_sender msg = (delegate_owner (wst_trade_delegate_state wst)).
+Proof.
+  intros wst msg wst' retval events Hstep HmsgType.
+  destruct msg; inv HmsgType; symmetry;
+    destruct Hstep as [Hrequire _];
+    inv Hrequire; auto.
+Qed.
 
+Lemma TradeDelegate_owner_not_changed_if_not_killed:
+  forall wst msg wst' retval events,
+    TradeDelegate.TradeDelegate.model wst msg wst' retval events ->
+    (forall sender, msg <> msg_kill sender) ->
+    (delegate_owner (wst_trade_delegate_state wst'))
+    = (delegate_owner (wst_trade_delegate_state wst)).
+Proof.
+  intros wst msg wst' retval events Hstep Hnotkill.
+  destruct msg eqn:Hmsg; destruct Hstep as [Hrequire [Htrans _]];
+    simpl in *; intuition; subst; auto.
+  (* ERC20 prop... *)
+  admit.
+  simpl. clear. destruct wst. simpl. revert wst_trade_delegate_state. clear.
+  induction params; auto.
+  simpl. intros. erewrite IHparams. simpl. auto.
+  exfalso. eauto.
+Admitted.
+  
+Lemma owner_not_changed_if_not_killed:
+  forall wst msg wst' retval events,
+    lr_step wst msg wst' retval events ->
+    (forall sender, msg <> MsgKill sender) ->
+    (delegate_owner (wst_trade_delegate_state wst'))
+    = (delegate_owner (wst_trade_delegate_state wst)).
+Proof.
+  intros wst msg wst' retval events Hstep Hnotkill.
+  destruct msg.
+  { admit. }
+  { admit. }
+  eapply TradeDelegate_owner_not_changed_if_not_killed; eauto.
+  intros. intro. eapply Hnotkill. rewrite H. unfold MsgKill. eauto.
+  { admit. }
+  { admit. }
+  { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
+      simpl in *; intuition; subst; auto. }
+  { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
+      simpl in *; intuition; subst; auto. }
+  { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
+      inv Htrans; simpl in *; intuition; subst; auto.
+    admit.
+  }
+  { admit. }
+Admitted.
+
+Theorem only_owner_is_able_to_control_LPSC:
+  forall msgs wst' retval events,
+    (** For any execution trace msgs *)
+    lr_model msgs wst' retval events ->
+    (** If LPSC is not killed during execution *)
+    (forall sender, ~ In (MsgKill sender) msgs) ->
+    (** Then any succeeded control msg call is performed by the initial owner *)
+    (forall msg,
+        In (MsgTradeDelegate msg) msgs ->
+        TradeDelegateMsgType msg = ControlMsg ->
+        TradeDelegateMsg_sender msg = delegate_owner (wst_trade_delegate_state wst_init)).
+Proof.
+  unfold lr_model. generalize wst_init.
+  induction 1; intros; subst.
+  inv H1.
+  inv H3.
+  eapply TradeDelegate_ControlMsg_sender_is_owner; eauto.
+  eapply IHlr_steps in H4. rewrite H4.
+  eapply owner_not_changed_if_not_killed.
+  eauto. intros. intro. eapply H2. left. eauto.
+  intros. intro. eapply H2. right. eauto.
+  auto.
+Qed.
+  
 (** * Only authorized users are able to fill/cancel orders *)
