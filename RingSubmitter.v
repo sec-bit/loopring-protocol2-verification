@@ -28,6 +28,13 @@ Section Aux.
     | a :: (_ :: _) as l' => last_error l'
     end.
 
+  Definition alt_nth {A: Type} (l: list A) (n: nat) (a: A)
+    : option (list A) :=
+    match nth_error l n with
+    | None => None
+    | _ => Some (firstn n l ++ a :: tl (skipn n l))
+    end.
+
 End Aux.
 
 Module SpendableElem <: ElemType.
@@ -247,6 +254,17 @@ Module RingSubmitter.
         submitter_rt_broker_spendables := submitter_rt_broker_spendables rsst;
       |}.
 
+    Definition submitter_update_token_spendable
+               (rsst: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState) (token: address)
+               (spendable: Spendable)
+      : RingSubmitterRuntimeState :=
+      let order := ord_rt_order ord in
+      let spendables := submitter_rt_token_spendables rsst in
+      let spendables' :=
+          TokenSpendableMap.upd spendables (order_owner order, token) spendable in
+      submitter_update_token_spendables rsst spendables'.
+
     Definition submitter_update_broker_spendables
                (rsst: RingSubmitterRuntimeState) (spendables: BrokerSpendableMap.t)
       : RingSubmitterRuntimeState :=
@@ -257,6 +275,19 @@ Module RingSubmitter.
         submitter_rt_token_spendables := submitter_rt_token_spendables rsst;
         submitter_rt_broker_spendables := spendables;
       |}.
+
+    Definition submitter_update_broker_spendable
+               (rsst: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState) (token: address)
+               (spendable: Spendable)
+      : RingSubmitterRuntimeState :=
+      let order := ord_rt_order ord in
+      let spendables := submitter_rt_broker_spendables rsst in
+      let spendables' :=
+          BrokerSpendableMap.upd spendables
+                                 (order_broker order, order_owner order, token)
+                                 spendable in
+      submitter_update_broker_spendables rsst spendables'.
 
     Definition upd_order_broker
                (ord: OrderRuntimeState) (broker: address)
@@ -564,6 +595,436 @@ Module RingSubmitter.
 
   End RunTimeState.
 
+  Section GetSpendable.
+
+    Section StGetSpendable.
+
+      (** Get broker spendable from spendable map *)
+      Definition __st_get_broker_spendable
+                 (st: RingSubmitterRuntimeState)
+                 (ord: OrderRuntimeState)
+                 (token: address) :=
+        let order := ord_rt_order ord in
+        let broker := order_broker order in
+        let owner := order_owner order in
+        BrokerSpendableMap.get (submitter_rt_broker_spendables st)
+                               (broker, owner, token).
+
+      (** Get broker spendableS from spendable map *)
+      Definition _st_get_brokerSpendableS
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        __st_get_broker_spendable st ord (order_tokenS (ord_rt_order ord)).
+
+      (** Get broker spendableFee from spendable map *)
+      Definition _st_get_brokerSpendableFee
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        __st_get_broker_spendable st ord (order_feeToken (ord_rt_order ord)).
+
+      (** Get token spendable from spendable map *)
+      Definition __st_get_token_spendable
+                 (st: RingSubmitterRuntimeState)
+                 (ord: OrderRuntimeState)
+                 (token: address) :=
+        let order := ord_rt_order ord in
+        let owner := order_owner order in
+        TokenSpendableMap.get (submitter_rt_token_spendables st) (owner, token).
+
+      (** Get token spendableS from spendable map *)
+      Definition _st_get_tokenSpendableS
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        __st_get_token_spendable st ord (order_tokenS (ord_rt_order ord)).
+
+      (** Get token spendableFee from spendable map *)
+      Definition _st_get_tokenSpendableFee
+                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
+        __st_get_token_spendable st ord (order_feeToken (ord_rt_order ord)).
+
+    End StGetSpendable.
+
+    Section ERC20GetTokenSpendable.
+
+      Definition __erc20_get_allowance_success
+                 (wst: WorldState) (owner token: address)
+                 (wst': WorldState) (allowance: uint) (events: list Event) : Prop :=
+        ERC20s.model wst
+                     (msg_allowance (wst_ring_submitter_addr wst)
+                                    token
+                                    owner
+                                    (wst_trade_delegate_addr wst))
+                     wst' (RetUint allowance) events.
+
+      Definition __erc20_get_balance_success
+                 (wst: WorldState) (owner token: address)
+                 (wst': WorldState) (balance: uint) (events: list Event) : Prop :=
+        ERC20s.model wst
+                     (msg_balanceOf (wst_ring_submitter_addr wst) token owner)
+                     wst' (RetUint balance) events.
+
+      Inductive _erc20_get_token_spendable
+                (wst: WorldState) (owner token: address)
+        : WorldState -> uint -> list Event -> Prop :=
+      | ERC20GetSpendable_zero:
+          forall wst' events,
+            __erc20_get_allowance_success wst owner token wst' 0 events ->
+            _erc20_get_token_spendable wst owner token wst' 0 events
+
+      | ERC20GetSpendable_nonzero_1:
+          forall wst' allowance events' wst'' balance events'',
+            __erc20_get_allowance_success wst owner token wst' allowance events' ->
+            allowance <> 0 ->
+            __erc20_get_balance_success wst' owner token wst'' balance events'' ->
+            balance < allowance ->
+            _erc20_get_token_spendable wst owner token wst'' balance (events' ++ events'')
+
+      | ERC20GetSpendable_nonzero_2:
+          forall wst' allowance events' wst'' balance events'',
+            __erc20_get_allowance_success wst owner token wst' allowance events' ->
+            allowance <> 0 ->
+            __erc20_get_balance_success wst' owner token wst'' balance events'' ->
+            balance >= allowance ->
+            _erc20_get_token_spendable wst owner token wst'' allowance (events' ++ events'')
+      .
+
+      Definition __erc20_get_token_spendable
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (token: address)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        forall wst'' amount events'',
+          _erc20_get_token_spendable
+            wst (order_owner (ord_rt_order ord)) token wst'' amount events'' ->
+          wst' = wst'' /\
+          events = events'' /\
+          spendable = mk_spendable true amount 0.
+
+      Definition _erc20_get_tokenSpendableS
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        __erc20_get_token_spendable
+          wst ord (order_tokenS (ord_rt_order ord)) wst' spendable events.
+
+      Definition _erc20_get_tokenSpendableFee
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        __erc20_get_token_spendable
+          wst ord (order_feeToken (ord_rt_order ord)) wst' spendable events.
+
+    End ERC20GetTokenSpendable.
+
+    Section ProxyGetBrokerSpendable.
+
+      Definition __proxy_get_allowance_success
+                 (wst: WorldState) (broker owner token interceptor: address)
+                 (wst': WorldState) (allowance: uint) (events: list Event) : Prop :=
+        BrokerInterceptor.model wst
+                                (msg_getAllowanceSafe (wst_ring_submitter_addr wst)
+                                                      interceptor owner broker token)
+                                wst' (RetUint allowance) events.
+
+      Definition __proxy_get_broker_spendable
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (token: address)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        forall order wst'' allowance events'',
+          order = ord_rt_order ord ->
+          __proxy_get_allowance_success
+            wst
+            (order_broker order) (order_owner order) token (ord_rt_brokerInterceptor ord)
+            wst'' allowance events'' ->
+          wst' = wst'' /\
+          events = events'' /\
+          spendable = mk_spendable true allowance 0.
+
+      Definition _proxy_get_brokerSpendableS
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        __proxy_get_broker_spendable
+          wst ord (order_tokenS (ord_rt_order ord)) wst' spendable events.
+
+      Definition _proxy_get_brokerSpendableFee
+                 (wst: WorldState)
+                 (ord: OrderRuntimeState)
+                 (wst': WorldState)
+                 (spendable: Spendable)
+                 (events: list Event) : Prop :=
+        __proxy_get_broker_spendable
+          wst ord (order_feeToken (ord_rt_order ord)) wst' spendable events.
+
+    End ProxyGetBrokerSpendable.
+
+    Inductive _get_token_spendable
+              (wst: WorldState)
+              (st: RingSubmitterRuntimeState)
+              (ord: OrderRuntimeState)
+              (token: address)
+      : WorldState -> RingSubmitterRuntimeState -> Spendable -> list Event -> Prop :=
+    | GetTokenSpenable_noninited:
+        forall wst' spendable events,
+          spendable_initialized (__st_get_token_spendable st ord token) = false ->
+          __erc20_get_token_spendable wst ord token wst' spendable events ->
+          _get_token_spendable
+            wst st ord token wst'
+            (submitter_update_token_spendable st ord token spendable)
+            spendable events
+
+    | GetTokenSpenable_inited:
+        forall spendable,
+          spendable = __st_get_token_spendable st ord token ->
+          spendable_initialized spendable = true ->
+          _get_token_spendable wst st ord token wst st spendable nil
+    .
+
+    Inductive _get_broker_spendable
+              (wst: WorldState)
+              (st: RingSubmitterRuntimeState)
+              (ord: OrderRuntimeState)
+              (token: address)
+      : WorldState -> RingSubmitterRuntimeState -> Spendable -> list Event -> Prop :=
+    | GetBrokerSpenable_noninited:
+        forall wst' spendable events,
+          spendable_initialized (__st_get_broker_spendable st ord token) = false ->
+          __proxy_get_broker_spendable wst ord token wst' spendable events ->
+          _get_broker_spendable
+            wst st ord token wst'
+            (submitter_update_broker_spendable st ord token spendable)
+            spendable events
+
+    | GetBrokerSpenable_inited:
+        forall spendable,
+          spendable = __st_get_broker_spendable st ord token ->
+          spendable_initialized spendable = true ->
+          _get_broker_spendable wst st ord token wst st spendable nil
+    .
+
+    Definition get_tokenSpendableS
+               (wst: WorldState) (st: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState)
+               (wst': WorldState) (st': RingSubmitterRuntimeState)
+               (spendable: Spendable) (events: list Event) : Prop :=
+      _get_token_spendable
+        wst st ord (order_tokenS (ord_rt_order ord)) wst' st' spendable events.
+
+    Definition get_tokenSpendableFee
+               (wst: WorldState) (st: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState)
+               (wst': WorldState) (st': RingSubmitterRuntimeState)
+               (spendable: Spendable) (events: list Event) : Prop :=
+      _get_token_spendable
+        wst st ord (order_feeToken (ord_rt_order ord)) wst' st' spendable events.
+
+    Definition get_brokerSpendableS
+               (wst: WorldState) (st: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState)
+               (wst': WorldState) (st': RingSubmitterRuntimeState)
+               (spendable: Spendable) (events: list Event) : Prop :=
+      _get_broker_spendable
+        wst st ord (order_tokenS (ord_rt_order ord)) wst' st' spendable events.
+
+    Definition get_brokerSpendableFee
+               (wst: WorldState) (st: RingSubmitterRuntimeState)
+               (ord: OrderRuntimeState)
+               (wst': WorldState) (st': RingSubmitterRuntimeState)
+               (spendable: Spendable) (events: list Event) : Prop :=
+      _get_broker_spendable
+        wst st ord (order_feeToken (ord_rt_order ord)) wst' st' spendable events.
+
+  End GetSpendable.
+
+  Section SetSpendable.
+
+    Definition _token_spendable_reserved_inc
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (token: address)
+               (amount: uint)
+    : TokenSpendableMap.t :=
+      let owner := order_owner (ord_rt_order ord) in
+      let spendable := TokenSpendableMap.get spendables (owner, token) in
+      let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                           spendable_amount      := spendable_amount spendable;
+                           spendable_reserved    := spendable_reserved spendable + amount;
+                        |} in
+      TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+    Definition _broker_spendable_reserved_inc
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (token: address)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      let order := ord_rt_order ord in
+      let broker := order_broker order in
+      let owner := order_owner order in
+      let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+      let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                           spendable_amount      := spendable_amount spendable;
+                           spendable_reserved    := spendable_reserved spendable + amount;
+                        |} in
+      BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+    Definition token_spendableS_reserved_inc
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : TokenSpendableMap.t :=
+      _token_spendable_reserved_inc spendables ord (order_tokenS (ord_rt_order ord)) amount.
+
+    Definition token_spendableFee_reserved_inc
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : TokenSpendableMap.t :=
+      _token_spendable_reserved_inc spendables ord (order_feeToken (ord_rt_order ord)) amount.
+
+    Definition broker_spendableS_reserved_inc
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      _broker_spendable_reserved_inc spendables ord (order_tokenS (ord_rt_order ord)) amount.
+
+    Definition broker_spendableFee_reserved_inc
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      _broker_spendable_reserved_inc spendables ord (order_feeToken (ord_rt_order ord)) amount.
+
+    Definition _clear_token_spendables_reserved
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+      : TokenSpendableMap.t :=
+      let order := ord_rt_order ord in
+      let owner := order_owner order in
+      let tokenS := order_tokenS order in
+      let spendableS := TokenSpendableMap.get spendables (owner, tokenS) in
+      let spendableS' := {| spendable_initialized := spendable_initialized spendableS;
+                            spendable_amount      := spendable_amount spendableS;
+                            spendable_reserved    := 0;
+                         |} in
+      let feeToken := order_feeToken order in
+      let feeSpendable := TokenSpendableMap.get spendables (owner, feeToken) in
+      let feeSpendable' := {| spendable_initialized := spendable_initialized feeSpendable;
+                              spendable_amount      := spendable_amount feeSpendable;
+                              spendable_reserved    := 0;
+                           |} in
+      TokenSpendableMap.upd
+        (TokenSpendableMap.upd spendables (owner, tokenS) spendableS')
+        (owner, feeToken) feeSpendable'.
+
+    Definition _clear_broker_spendables_reserved
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+      : BrokerSpendableMap.t :=
+      let order := ord_rt_order ord in
+      let broker := order_broker order in
+      let owner := order_owner order in
+      let tokenS := order_tokenS order in
+      let spendableS := BrokerSpendableMap.get spendables (broker, owner, tokenS) in
+      let spendableS' := {| spendable_initialized := spendable_initialized spendableS;
+                            spendable_amount      := spendable_amount spendableS;
+                            spendable_reserved    := 0;
+                         |} in
+      let feeToken := order_feeToken order in
+      let feeSpendable := BrokerSpendableMap.get spendables (broker, owner, feeToken) in
+      let feeSpendable' := {| spendable_initialized := spendable_initialized feeSpendable;
+                              spendable_amount      := spendable_amount feeSpendable;
+                              spendable_reserved    := 0;
+                           |} in
+      BrokerSpendableMap.upd
+        (BrokerSpendableMap.upd spendables (broker, owner, tokenS) spendableS')
+        (broker, owner, feeToken) feeSpendable'.
+
+    Definition clear_order_spendables_reserved
+               (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState)
+      : RingSubmitterRuntimeState :=
+      let token_spendables := submitter_rt_token_spendables st in
+      let token_spendables' := _clear_token_spendables_reserved token_spendables ord in
+      let broker_spendables := submitter_rt_broker_spendables st in
+      let broker_spendables' :=
+          match ord_rt_brokerInterceptor ord with
+          | O => broker_spendables
+          | _ => _clear_broker_spendables_reserved broker_spendables ord
+          end
+      in
+      submitter_update_token_spendables
+        (submitter_update_broker_spendables st broker_spendables')
+        token_spendables'.
+
+    Definition _token_spendable_amount_dec
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (token: address)
+               (amount: uint)
+      : TokenSpendableMap.t :=
+      let owner := order_owner (ord_rt_order ord) in
+      let spendable := TokenSpendableMap.get spendables (owner, token) in
+      let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                           spendable_amount      := spendable_amount spendable - amount;
+                           spendable_reserved    := spendable_reserved spendable;
+                        |} in
+      TokenSpendableMap.upd spendables (owner, token) spendable'.
+
+    Definition _broker_spendable_amount_dec
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (token: address)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      let order := ord_rt_order ord in
+      let broker := order_broker order in
+      let owner := order_owner order in
+      let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
+      let spendable' := {| spendable_initialized := spendable_initialized spendable;
+                           spendable_amount      := spendable_amount spendable - amount;
+                           spendable_reserved    := spendable_reserved spendable;
+                        |} in
+      BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
+
+    Definition token_spendableS_amount_dec
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : TokenSpendableMap.t :=
+      _token_spendable_amount_dec spendables ord (order_tokenS (ord_rt_order ord)) amount.
+
+    Definition token_spendableFee_amount_dec
+               (spendables: TokenSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : TokenSpendableMap.t :=
+      _token_spendable_amount_dec spendables ord (order_feeToken (ord_rt_order ord)) amount.
+
+    Definition broker_spendableS_amount_dec
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      _broker_spendable_amount_dec spendables ord (order_tokenS (ord_rt_order ord)) amount.
+
+    Definition broker_spendableFee_amount_dec
+               (spendables: BrokerSpendableMap.t)
+               (ord: OrderRuntimeState)
+               (amount: uint)
+      : BrokerSpendableMap.t :=
+      _broker_spendable_amount_dec spendables ord (order_feeToken (ord_rt_order ord)) amount.
+
+  End SetSpendable.
+
   Parameters get_order_hash: Order -> bytes32.
   Parameters get_ring_hash: Ring -> list OrderRuntimeState -> bytes32.
   Parameter get_mining_hash: Mining -> list RingRuntimeState -> bytes32.
@@ -866,397 +1327,6 @@ Module RingSubmitter.
         |}.
 
     End GetFilledAndCheckCancelled.
-
-    Section GetSpendable.
-
-      Definition get_order_brokerSpendableS
-                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        BrokerSpendableMap.get (submitter_rt_broker_spendables st) (broker, owner, token).
-
-      Definition get_order_brokerSpendableFee
-                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_feeToken order in
-        BrokerSpendableMap.get (submitter_rt_broker_spendables st) (broker, owner, token).
-
-      Definition get_order_tokenSpendableS
-                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        TokenSpendableMap.get (submitter_rt_token_spendables st) (owner, token).
-
-      Definition get_order_tokenSpendableFee
-                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_feeToken order in
-        TokenSpendableMap.get (submitter_rt_token_spendables st) (owner, token).
-
-      Definition erc20_get_allowance_success
-                 (wst: WorldState) (owner token: address)
-                 (wst': WorldState) (allowance: uint) (events: list Event) : Prop :=
-        ERC20s.model wst
-                     (msg_allowance (wst_ring_submitter_addr wst)
-                                    token
-                                    owner
-                                    (wst_trade_delegate_addr wst))
-                     wst' (RetUint allowance) events.
-
-      Definition erc20_get_balance_success
-                 (wst: WorldState) (owner token: address)
-                 (wst': WorldState) (balance: uint) (events: list Event) : Prop :=
-        ERC20s.model wst
-                     (msg_balanceOf (wst_ring_submitter_addr wst) token owner)
-                     wst' (RetUint balance) events.
-
-      Inductive erc20_get_spendable
-                (wst: WorldState) (owner token: address)
-        : WorldState -> uint -> list Event -> Prop :=
-      | ERC20GetSpendable_zero:
-          forall wst' events,
-            erc20_get_allowance_success wst owner token wst' 0 events ->
-            erc20_get_spendable wst owner token wst' 0 events
-
-      | ERC20GetSpendable_nonzero_1:
-          forall wst' allowance events' wst'' balance events'',
-            erc20_get_allowance_success wst owner token wst' allowance events' ->
-            allowance <> 0 ->
-            erc20_get_balance_success wst' owner token wst'' balance events'' ->
-            balance < allowance ->
-            erc20_get_spendable wst owner token wst'' balance (events' ++ events'')
-
-      | ERC20GetSpendable_nonzero_2:
-          forall wst' allowance events' wst'' balance events'',
-            erc20_get_allowance_success wst owner token wst' allowance events' ->
-            allowance <> 0 ->
-            erc20_get_balance_success wst' owner token wst'' balance events'' ->
-            balance >= allowance ->
-            erc20_get_spendable wst owner token wst'' allowance (events' ++ events'')
-      .
-
-      Inductive get_tokenS_spendable
-                (wst: WorldState)
-                (st: RingSubmitterRuntimeState)
-                (ord: OrderRuntimeState)
-        : WorldState -> RingSubmitterRuntimeState -> Spendable -> list Event -> Prop :=
-      | GetTokenSpendable_noninited:
-          forall order wst' amount events spendable,
-            spendable_initialized (get_order_tokenSpendableS st ord) = false ->
-            order = ord_rt_order ord ->
-            erc20_get_spendable wst (order_owner order) (order_tokenS order)
-                                wst' amount events ->
-            spendable = {| spendable_initialized := true;
-                           spendable_amount      := amount;
-                           spendable_reserved    := 0;
-                        |} ->
-            get_tokenS_spendable wst st ord wst'
-                                 (submitter_update_token_spendables
-                                    st
-                                    (TokenSpendableMap.upd
-                                       (submitter_rt_token_spendables st)
-                                       (order_owner order, order_tokenS order)
-                                       spendable))
-                                 spendable
-                                 events
-
-      | GetTokenSpendable_inited:
-          forall spendable,
-            spendable = get_order_tokenSpendableS st ord ->
-            spendable_initialized spendable = true ->
-            get_tokenS_spendable wst st ord wst st spendable nil
-      .
-
-      Definition proxy_get_allowance_success
-                 (wst: WorldState) (broker owner token interceptor: address)
-                 (wst': WorldState) (allowance: uint) (events: list Event) : Prop :=
-        BrokerInterceptor.model wst
-                                (msg_getAllowanceSafe (wst_ring_submitter_addr wst)
-                                                      interceptor owner broker token)
-                                wst' (RetUint allowance) events.
-
-      Inductive get_broker_spendable
-                (wst: WorldState)
-                (st: RingSubmitterRuntimeState)
-                (ord: OrderRuntimeState)
-        : WorldState -> RingSubmitterRuntimeState -> Spendable -> list Event -> Prop :=
-      | GetBrokerSpendable_uninit:
-          forall order wst' allowance events spendable,
-            spendable_initialized (get_order_tokenSpendableS st ord) = false ->
-            order = ord_rt_order ord ->
-            proxy_get_allowance_success wst
-                                        (order_broker order)
-                                        (order_owner order)
-                                        (order_tokenS order)
-                                        (ord_rt_brokerInterceptor ord)
-                                        wst' allowance events ->
-            spendable = {| spendable_initialized := true;
-                           spendable_amount      := allowance;
-                           spendable_reserved    := 0;
-                        |} ->
-            get_broker_spendable wst st ord wst'
-                                 (submitter_update_broker_spendables
-                                    st
-                                    (BrokerSpendableMap.upd
-                                       (submitter_rt_broker_spendables st)
-                                       (order_broker order, order_owner order, order_tokenS order)
-                                       spendable))
-                                 spendable
-                                 events
-
-      | GetBrokerSpendable_inited:
-          forall spendable,
-            spendable = get_order_brokerSpendableS st ord ->
-            spendable_initialized spendable = true ->
-            get_broker_spendable wst st ord wst st spendable nil
-      .
-
-      Inductive get_spendable
-                (wst: WorldState)
-                (st: RingSubmitterRuntimeState)
-                (ord: OrderRuntimeState)
-        : WorldState -> RingSubmitterRuntimeState -> uint -> list Event -> Prop :=
-      | GetSpendable_no_broker:
-          forall wst' st' spendable events,
-            ord_rt_brokerInterceptor ord = 0 ->
-            get_tokenS_spendable wst st ord wst' st' spendable events ->
-            get_spendable wst st ord wst' st'
-                          (spendable_amount spendable - spendable_reserved spendable)
-                          events
-
-      | GetSpendable_broker:
-          forall wst' wst'' st' st'' events' events'' token_spendable broker_spendable,
-            ord_rt_brokerInterceptor ord <> 0 ->
-            get_tokenS_spendable wst st ord wst' st' token_spendable events' ->
-            get_broker_spendable wst' st' ord wst'' st'' broker_spendable events'' ->
-            get_spendable wst st ord wst'' st''
-                          (min (spendable_amount token_spendable - spendable_reserved token_spendable)
-                               (spendable_amount broker_spendable - spendable_reserved broker_spendable))
-                          (events' ++ events'')
-      .
-
-      Definition update_token_spendables_initialized
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (initialized: bool)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := TokenSpendableMap.get spendables (owner, token) in
-        let spendable' := {| spendable_initialized := initialized;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        TokenSpendableMap.upd spendables (owner, token) spendable'.
-
-      Definition update_token_spendables_amount
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (amount: uint)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := TokenSpendableMap.get spendables (owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := amount;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        TokenSpendableMap.upd spendables (owner, token) spendable'.
-
-      Definition update_token_spendables_amount_add
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (amount: uint)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := TokenSpendableMap.get spendables (owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable + amount;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        TokenSpendableMap.upd spendables (owner, token) spendable'.
-
-      Definition update_token_spendables_reserved
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (reserved: uint)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := TokenSpendableMap.get spendables (owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := reserved;
-                          |} in
-        TokenSpendableMap.upd spendables (owner, token) spendable'.
-
-      Definition update_token_spendables_reserved_add
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (reserved: uint)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := TokenSpendableMap.get spendables (owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := spendable_reserved spendable + reserved;
-                          |} in
-        TokenSpendableMap.upd spendables (owner, token) spendable'.
-
-      Definition clear_token_spendables_reserved
-                 (spendables: TokenSpendableMap.t)
-                 (ord: OrderRuntimeState)
-        : TokenSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let owner := order_owner order in
-        let tokenS := order_tokenS order in
-        let spendableS := TokenSpendableMap.get spendables (owner, tokenS) in
-        let spendableS' := {| spendable_initialized := spendable_initialized spendableS;
-                              spendable_amount      := spendable_amount spendableS;
-                              spendable_reserved    := 0;
-                          |} in
-        let feeToken := order_feeToken order in
-        let feeSpendable := TokenSpendableMap.get spendables (owner, feeToken) in
-        let feeSpendable' := {| spendable_initialized := spendable_initialized feeSpendable;
-                                spendable_amount      := spendable_amount feeSpendable;
-                                spendable_reserved    := 0;
-                             |} in
-        TokenSpendableMap.upd
-          (TokenSpendableMap.upd spendables (owner, tokenS) spendableS')
-          (owner, feeToken) feeSpendable'.
-
-      Definition update_broker_spendables_initialized
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (initialized: bool)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
-        let spendable' := {| spendable_initialized := initialized;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
-
-      Definition update_broker_spendables_amount
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (amount: uint)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := amount;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
-
-      Definition update_broker_spendables_amount_add
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (amount: uint)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable + amount;
-                             spendable_reserved    := spendable_reserved spendable;
-                          |} in
-        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
-
-      Definition update_broker_spendables_reserved
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (reserved: uint)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := reserved;
-                          |} in
-        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
-
-      Definition update_broker_spendables_reserved_add
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (reserved: uint)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_tokenS order in
-        let spendable := BrokerSpendableMap.get spendables (broker, owner, token) in
-        let spendable' := {| spendable_initialized := spendable_initialized spendable;
-                             spendable_amount      := spendable_amount spendable;
-                             spendable_reserved    := spendable_reserved spendable + reserved;
-                          |} in
-        BrokerSpendableMap.upd spendables (broker, owner, token) spendable'.
-
-      Definition clear_broker_spendables_reserved
-                 (spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-        : BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let tokenS := order_tokenS order in
-        let spendableS := BrokerSpendableMap.get spendables (broker, owner, tokenS) in
-        let spendableS' := {| spendable_initialized := spendable_initialized spendableS;
-                              spendable_amount      := spendable_amount spendableS;
-                              spendable_reserved    := 0;
-                          |} in
-        let feeToken := order_feeToken order in
-        let feeSpendable := BrokerSpendableMap.get spendables (broker, owner, feeToken) in
-        let feeSpendable' := {| spendable_initialized := spendable_initialized feeSpendable;
-                                spendable_amount      := spendable_amount feeSpendable;
-                                spendable_reserved    := 0;
-                             |} in
-        BrokerSpendableMap.upd
-          (BrokerSpendableMap.upd spendables (broker, owner, tokenS) spendableS')
-          (broker, owner, feeToken) feeSpendable'.
-
-      Definition clear_order_spendables_reserved
-                 (st: RingSubmitterRuntimeState) (ord: OrderRuntimeState) :=
-        let token_spendables := submitter_rt_token_spendables st in
-        let token_spendables' := clear_token_spendables_reserved token_spendables ord in
-        let broker_spendables := submitter_rt_broker_spendables st in
-        let broker_spendables' :=
-            match ord_rt_brokerInterceptor ord with
-            | O => broker_spendables
-            | _ => clear_broker_spendables_reserved broker_spendables ord
-            end
-        in
-        submitter_update_token_spendables
-          (submitter_update_broker_spendables st broker_spendables')
-          token_spendables'.
-
-    End GetSpendable.
 
     Section CheckOrders.
 
@@ -1700,11 +1770,11 @@ Module RingSubmitter.
           | Some ord =>
             let reserved := part_fillAmountS p in
             let token_spendables' :=
-                update_token_spendables_reserved_add token_spendables ord reserved in
+                token_spendableS_reserved_inc token_spendables ord reserved in
             let broker_spendables' :=
                 match ord_rt_brokerInterceptor ord with
                 | O => broker_spendables
-                | _ => update_broker_spendables_reserved_add broker_spendables ord reserved
+                | _ => broker_spendableS_reserved_inc broker_spendables ord reserved
                 end
             in _reserve_orders_fillAmountS ps' orders token_spendables' broker_spendables'
           end
@@ -1760,12 +1830,12 @@ Module RingSubmitter.
         let owner := order_owner order in
         let token := order_feeToken order in
         let token_spendables := submitter_rt_token_spendables st in
-        let token_spendables' := update_token_spendables_reserved_add token_spendables ord amount in
+        let token_spendables' := token_spendableFee_reserved_inc token_spendables ord amount in
         let broker_spendables := submitter_rt_broker_spendables st in
         let broker_spendables' :=
             match ord_rt_brokerInterceptor ord with
             | O => broker_spendables
-            | _ => update_broker_spendables_reserved_add broker_spendables ord amount
+            | _ => broker_spendableFee_reserved_inc broker_spendables ord amount
             end
         in submitter_update_broker_spendables
              (submitter_update_token_spendables st token_spendables')
@@ -1935,6 +2005,7 @@ Module RingSubmitter.
                  (lrings rrings: list RingRuntimeState)
                  (wst': WorldState)
                  (st': RingSubmitterRuntimeState)
+                 (r': RingRuntimeState)
                  (events: list Event) : Prop :=
         forall wst1 st1 r1 events1
           wst2 st2 r2 events2
@@ -1966,7 +2037,104 @@ Module RingSubmitter.
           wst5 = wst4 ->
           events5 = nil ->
           (* final *)
-          wst' = wst5 /\ st' = st5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+          wst' = wst5 /\ st' = st5 /\ r' = r5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+
+      Definition adjust_order_state
+                 (p: Participation)
+                 (ord: OrderRuntimeState)
+                 (token_spendables: TokenSpendableMap.t)
+                 (broker_spendables: BrokerSpendableMap.t)
+        : OrderRuntimeState * TokenSpendableMap.t * BrokerSpendableMap.t :=
+        let filled_amount := part_fillAmountS p + part_splitS p in
+        let fee_amount := part_feeAmount p in
+        let ord' := upd_order_filled ord filled_amount in
+        let token_spendables' :=
+            token_spendableFee_amount_dec
+              (token_spendableS_amount_dec token_spendables ord filled_amount)
+              ord fee_amount in
+        let broker_spendables' :=
+            match ord_rt_brokerInterceptor ord with
+            | O => broker_spendables
+            | _ =>
+              broker_spendableFee_amount_dec
+                (broker_spendableS_amount_dec broker_spendables ord filled_amount)
+                ord fee_amount
+            end
+        in (ord', token_spendables, broker_spendables).
+
+      Fixpoint _adjust_orders_state
+               (ps: list Participation)
+               (orders: list OrderRuntimeState)
+               (token_spendables: TokenSpendableMap.t)
+               (broker_spendables: BrokerSpendableMap.t)
+        : option (list OrderRuntimeState * TokenSpendableMap.t * BrokerSpendableMap.t) :=
+        match ps with
+        | nil => Some (orders, token_spendables, broker_spendables)
+        | p :: ps' =>
+          let ord_idx := part_order_idx p in
+          match nth_error orders ord_idx with
+          | None => None (* invalid case *)
+          | Some ord =>
+            match adjust_order_state p ord token_spendables broker_spendables with
+            | (ord', token_spendables', broker_spendables') =>
+              match alt_nth orders ord_idx ord' with
+              | None => None (* invalid case *)
+              | Some orders' => _adjust_orders_state
+                                 ps' orders' token_spendables' broker_spendables'
+              end
+            end
+          end
+        end.
+
+      Definition adjust_orders_state
+                 (st: RingSubmitterRuntimeState) (r: RingRuntimeState)
+        : option RingSubmitterRuntimeState :=
+        match _adjust_orders_state
+                (ring_rt_participations r)
+                (submitter_rt_orders st)
+                (submitter_rt_token_spendables st)
+                (submitter_rt_broker_spendables st) with
+        | None => None (* invalid case *)
+        | Some (orders', token_spendables', broker_spendables') =>
+          Some (submitter_update_broker_spendables
+                  (submitter_update_token_spendables
+                     (submitter_update_orders st orders')
+                     token_spendables')
+                  broker_spendables')
+        end.
+
+      Inductive _rings_check_and_calc_fills_fees
+                (wst: WorldState)
+                (st: RingSubmitterRuntimeState)
+        : list RingRuntimeState (* rings that have been checked and updated *) ->
+          list RingRuntimeState (* rings that have not been checked and updated *) ->
+          WorldState (* post world state *) ->
+          RingSubmitterRuntimeState (* post ring submitter state *) ->
+          list Event ->
+          Prop :=
+      | RingsCheckAndCalcFillsFees_nil:
+          _rings_check_and_calc_fills_fees wst st (submitter_rt_rings st) nil wst st nil
+
+      | RingsCheckAndCalcFillsFees_valid_cons:
+          forall lrings r rrings wst' st' r' events st'' wst''' st''' events',
+            submitter_rt_rings st = lrings ++ r :: rrings ->
+            ring_orders_valid r (submitter_rt_orders st) ->
+            ~ ring_has_subrings r (submitter_rt_orders st) ->
+            calculate_fill_amount_and_fee wst st r lrings rrings wst' st' r' events ->
+            adjust_orders_state st' r' = Some st'' ->
+            _rings_check_and_calc_fills_fees wst' st'' (lrings ++ r' :: nil) rrings wst''' st''' events' ->
+            _rings_check_and_calc_fills_fees wst st lrings (r :: rrings) wst''' st''' (events ++ events')
+
+      | RingsCheckAndCalcFillsFees_invalid_cons:
+          forall lrings r rrings r' wst'' st'' events,
+            submitter_rt_rings st = lrings ++ r :: rrings ->
+            (~ ring_orders_valid r (submitter_rt_orders st) \/ ring_has_subrings r (submitter_rt_orders st)) ->
+            r' = upd_ring_valid r false ->
+            _rings_check_and_calc_fills_fees
+              wst (submitter_update_rings st (lrings ++ r' :: rrings))
+              (lrings ++ r' :: nil) rrings wst'' st'' events ->
+            _rings_check_and_calc_fills_fees wst st lrings (r :: rrings) wst'' st'' events
+      .
 
       Definition calc_fills_and_fees_subspec
                  (sender: address)
@@ -1978,14 +2146,44 @@ Module RingSubmitter.
             fun wst st => True;
 
           subspec_trans :=
-            fun wst st wst' st' => True;
+            fun wst st wst' st' =>
+              forall wst'' st'' events,
+                _rings_check_and_calc_fills_fees
+                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
+                wst' = wst'' /\ st' = st''
+          ;
 
           subspec_events :=
-            fun wst st events => events = nil;
+            fun wst st events =>
+              forall wst'' st'' events',
+                _rings_check_and_calc_fills_fees
+                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
+                events = events'
+          ;
         |}.
 
     End CalculateFillsAndFees.
 
+    Section ValidateAllOrNone.
+
+      Fixpoint validate_AllOrNone (orders: list OrderRuntimeState)
+      : list OrderRuntimeState :=
+        match orders with
+        | nil => nil
+        | ord :: orders' =>
+          let order := ord_rt_order ord in
+          let ord' := match order_allOrNone order with
+                      | true => if Nat.eqb (ord_rt_filledAmountS ord)
+                                          (order_amountS (ord_rt_order ord)) then
+                                 ord
+                               else
+                                 upd_order_valid ord false
+                      | false => ord
+                      end
+          in ord' :: validate_AllOrNone orders'
+        end.
+
+      Definition validate_AllOrNone_subspec
                  (sender: address)
                  (_orders: list Order)
                  (_rings: list Ring)
@@ -1995,13 +2193,16 @@ Module RingSubmitter.
             fun wst st => True;
 
           subspec_trans :=
-            fun wst st wst' st' => True;
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = submitter_update_orders
+                      st (validate_AllOrNone (submitter_rt_orders st));
 
           subspec_events :=
             fun wst st events => events = nil;
         |}.
 
-    End CalculateFillsAndFees.
+    End ValidateAllOrNone.
 
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
@@ -2069,7 +2270,9 @@ Module RingSubmitter.
            update_mining_hash_subspec ;;
            update_miner_interceptor_subspec ;;
            check_miner_signature_subspec ;;
-           check_orders_dual_sig_subspec
+           check_orders_dual_sig_subspec ;;
+           calc_fills_and_fees_subspec ;;
+           validate_AllOrNone_subspec
         )
         sender orders rings mining.
 
