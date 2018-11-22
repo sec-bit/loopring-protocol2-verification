@@ -2164,6 +2164,46 @@ Module RingSubmitter.
 
     End CalculateFillsAndFees.
 
+    Section ValidateAllOrNone.
+
+      Fixpoint validate_AllOrNone (orders: list OrderRuntimeState)
+      : list OrderRuntimeState :=
+        match orders with
+        | nil => nil
+        | ord :: orders' =>
+          let order := ord_rt_order ord in
+          let ord' := match order_allOrNone order with
+                      | true => if Nat.eqb (ord_rt_filledAmountS ord)
+                                          (order_amountS (ord_rt_order ord)) then
+                                 ord
+                               else
+                                 upd_order_valid ord false
+                      | false => ord
+                      end
+          in ord' :: validate_AllOrNone orders'
+        end.
+
+      Definition validate_AllOrNone_subspec
+                 (sender: address)
+                 (_orders: list Order)
+                 (_rings: list Ring)
+                 (_mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st => True;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              wst' = wst /\
+              st' = submitter_update_orders
+                      st (validate_AllOrNone (submitter_rt_orders st));
+
+          subspec_events :=
+            fun wst st events => events = nil;
+        |}.
+
+    End ValidateAllOrNone.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -2231,7 +2271,8 @@ Module RingSubmitter.
            update_miner_interceptor_subspec ;;
            check_miner_signature_subspec ;;
            check_orders_dual_sig_subspec ;;
-           calc_fills_and_fees_subspec
+           calc_fills_and_fees_subspec ;;
+           validate_AllOrNone_subspec
         )
         sender orders rings mining.
 
