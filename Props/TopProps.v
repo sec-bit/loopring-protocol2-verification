@@ -115,6 +115,13 @@ Definition transaction_event (evt: Event) : Prop :=
     => False
   end.
 
+(** * ERC20 Axioms *)
+Axiom ERC20s_do_not_modify_TradeDelegate_state:
+  forall wst msg wst' retval events,
+    ERC20.ERC20s.model wst msg wst' retval events ->
+    wst_trade_delegate_state wst' = wst_trade_delegate_state wst.
+
+
 (** * Lemmas *)
 Lemma lr_steps_partition:
   forall wst msgs msg msgs' events wst' retval,
@@ -144,6 +151,21 @@ Proof.
   split. eauto.
   split. eauto. rewrite <- Hevents, app_assoc_reverse.  auto.
 Qed.
+
+Lemma TradeDelegate_view_msg_state_unchanged:
+  forall wst msg wst' retval events,
+    TradeDelegate.TradeDelegate.model wst msg wst' retval events ->
+    TradeDelegateMsgType msg = View ->
+    wst' = wst.
+Proof.
+  intros wst msg wst' retval events Hstep HmsgType.
+  destruct msg eqn:Hmsg; try discriminate;
+    destruct Hstep as [_ [Htrans _]].
+  inv Htrans; auto.
+  inv Htrans; auto.
+Qed.
+
+
 
 
 
@@ -223,7 +245,47 @@ Local Hint Resolve
       TradeDelegate_no_further_transaction_msg_once_suspended
       RingCanceller_no_further_msg_once_suspended
       RingSubmitter_no_further_msg_once_suspended.
-      
+
+Lemma FeeHolder_does_not_modify_trade_delegate_state:
+  forall wst msg wst' retval events,
+    lr_step wst (MsgFeeHolder msg) wst' retval events ->
+    wst_trade_delegate_state wst' = wst_trade_delegate_state wst.
+Proof.
+  intros wst msg wst' retval events Hstep.
+  destruct msg eqn:Hmsg; destruct Hstep as [Hrequire [Htrans _]];
+    simpl in *.
+  { inv Hrequire. inv Htrans. intuition.
+    match goal with
+    | [ H1: forall x y, ?P x y -> _,
+          H2: exists w v, ?P w v |- _ ] =>
+      destruct H2 as (?&?&H2); specialize (H1 _ _ H2); subst
+    end.
+    unfold FeeHolder.FeeHolder.transfer_withdraw in *.
+    specialize (H3 RetNone). apply ERC20s_do_not_modify_TradeDelegate_state in H3.
+    rewrite H3.
+    unfold FeeHolder.FeeHolder.wst_before_transfer. simpl. auto. }
+  { inv Hrequire; inv Htrans. intuition.
+    match goal with
+    | [ H1: forall x y, ?P x y -> _,
+          H2: exists w v, ?P w v |- _ ] =>
+      destruct H2 as (?&?&H2); specialize (H1 _ _ H2); subst
+    end.
+    unfold FeeHolder.FeeHolder.transfer_withdraw in *.
+    specialize (H3 RetNone). apply ERC20s_do_not_modify_TradeDelegate_state in H3.
+    rewrite H3.
+    unfold FeeHolder.FeeHolder.wst_before_transfer. simpl. auto. }
+  { inv Hrequire; inv Htrans. intuition.
+    destruct H as (events' & retval' & Hstep & Hret).
+    eapply TradeDelegate_view_msg_state_unchanged in Hstep; eauto.
+    subst. clear. revert wst. induction params; auto.
+    intro. simpl.
+    rewrite (IHparams (FeeHolder.FeeHolder.wst_add_fee
+                         wst (feeblncs_token a)
+                         (feeblncs_owner a)
+                         (feeblncs_value a))).
+    simpl; auto. }
+Qed.
+
 Lemma always_suspended_if_not_resumed:
   forall wst msg wst' retval events,
     delegate_suspended (wst_trade_delegate_state wst) = true ->
@@ -244,11 +306,22 @@ Proof.
     destruct H0 as [Hrequire _]. exfalso. inv Hrequire. congruence.
     exfalso; eapply H1; unfold MsgResume; eauto.
     destruct H0 as [_ [[Htrans _] _]]. subst. simpl; auto. }
-  admit.
-  admit.
-  admit.
-  admit.
-  admit.
+  erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto.
+  erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto.
+  { (* BrokerRegistry *)
+    destruct H0 as [Hrequire [Htrans _]].
+    destruct msg; simpl in *; intuition; subst; intuition. }
+  { (* OrderRegistry *)
+    destruct H0 as [Hrequire [Htrans _]].
+    destruct msg; simpl in *; intuition; subst; intuition. }
+  { (* BurnRateTable *)
+    destruct H0 as [Hrequire [Htrans _]].
+    destruct msg; inv Htrans; simpl in *; intuition; subst; intuition.
+    unfold BurnRateTable.upgradetier in H3. simpl in H3. inv H3.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
+  { (* BrokerInterceptor *)
+    admit.
+  }
 Admitted.
     
 Theorem no_further_LPSC_transaction_once_suspended:
@@ -323,19 +396,6 @@ Qed.
 Local Hint Resolve
       TradeDelegate_no_further_control_msg_once_killed.
 
-Lemma TradeDelegate_view_msg_state_unchanged:
-  forall wst msg wst' retval events,
-    TradeDelegate.TradeDelegate.model wst msg wst' retval events ->
-    TradeDelegateMsgType msg = View ->
-    wst' = wst.
-Proof.
-  intros wst msg wst' retval events Hstep HmsgType.
-  destruct msg eqn:Hmsg; try discriminate;
-    destruct Hstep as [_ [Htrans _]].
-  inv Htrans; auto.
-  inv Htrans; auto.
-Qed.
-
 Lemma kill_inv:
   forall wst msg wst' retval events,
     delegate_owner (wst_trade_delegate_state wst) = 0 ->
@@ -350,10 +410,10 @@ Proof.
     try (contradict HmsgType; eauto; fail).
   eapply TradeDelegate_view_msg_state_unchanged in HmsgType; eauto. subst; auto.
   { (* FeeHolder *)
-    admit.
+    erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto.
   }
   { (* ERC20 *)
-    admit.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto.
   }
   { (* BrokerRegistry *)
     destruct Hstep as [Hrequire [Htrans _]].
@@ -363,8 +423,10 @@ Proof.
     destruct msg; simpl in *; intuition; subst; intuition. }
   { (* BurnRateTable *)
     destruct Hstep as [Hrequire [Htrans _]].
-    destruct msg; inv Htrans; simpl in *; intuition; subst; intuition.
-    admit. admit.
+    destruct msg; inv Htrans; simpl in *; subst; try (intuition; fail).
+    inv H1. erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
+  { (* BrokerInterceptor *)
+    admit.
   }
 Admitted.
 
@@ -443,14 +505,22 @@ Lemma TradeDelegate_owner_not_changed_if_not_killed:
 Proof.
   intros wst msg wst' retval events Hstep Hnotkill.
   destruct msg eqn:Hmsg; destruct Hstep as [Hrequire [Htrans _]];
-    simpl in *; intuition; subst; auto.
-  (* ERC20 prop... *)
-  admit.
-  simpl. clear. destruct wst. simpl. revert wst_trade_delegate_state. clear.
-  induction params; auto.
-  simpl. intros. erewrite IHparams. simpl. auto.
-  exfalso. eauto.
-Admitted.
+    simpl in *; try (intuition; subst; auto; fail).
+  { intuition. subst.
+    destruct H0 as (wst'' & events' & Htrans).
+    erewrite H2; try exact Htrans.
+    revert Htrans. clear. revert wst events'.
+    induction params; simpl; intros.
+    inv Htrans; auto.
+    inv H. inv Htrans. inv H. inv H.
+    erewrite IHparams; try eexact H1.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
+  { intuition. rewrite H0. simpl.
+    clear. generalize (wst_trade_delegate_state wst). clear.
+    induction params; auto.
+    intros. simpl. rewrite IHparams. auto. }
+  exfalso. eapply Hnotkill. eauto.
+Qed.
   
 Lemma owner_not_changed_if_not_killed:
   forall wst msg wst' retval events,
@@ -461,21 +531,66 @@ Lemma owner_not_changed_if_not_killed:
 Proof.
   intros wst msg wst' retval events Hstep Hnotkill.
   destruct msg.
-  { admit. }
-  { admit. }
-  eapply TradeDelegate_owner_not_changed_if_not_killed; eauto.
-  intros. intro. eapply Hnotkill. rewrite H. unfold MsgKill. eauto.
-  { admit. }
-  { admit. }
+  { (* RingSubmitter *)
+    clear Hnotkill.
+    admit.
+  }
+  { (* RingCanceller *)
+    clear Hnotkill.
+    destruct msg eqn:Hmsg; destruct Hstep as [Hrequire [Htrans _]];
+      simpl in *; intuition; subst.
+    { destruct H0 as (wst'' & events' & Hstep).
+      erewrite H2; try exact Hstep. clear H2.
+      revert H wst events' Hstep. clear. intro H. induction order_hashes.
+      intros. contradiction.
+      intros. clear H. destruct order_hashes.
+      inv Hstep. inv H. inv H. inv H1; inv H.
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate.
+      inv Hstep; inv H.
+      erewrite IHorder_hashes; try eassumption.
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate.
+      intros. discriminate. }
+    { destruct Hrequire as (wst'' & events' & Hstep).
+      erewrite H0; try exact Hstep. clear H0.
+      unfold RingCanceller.RingCanceller.set_trading_pair_cutoffs in Hstep.
+      specialize (Hstep RetNone).
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate. }
+    { destruct Hrequire as (wst'' & events' & Hstep).
+      erewrite H0; try exact Hstep. clear H0.
+      unfold RingCanceller.RingCanceller.set_trading_pair_cutoffs in Hstep.
+      specialize (Hstep RetNone).
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate. }
+    { destruct Hrequire as (wst'' & events' & Hstep).
+      erewrite H0; try exact Hstep. clear H0.
+      unfold RingCanceller.RingCanceller.set_trading_pair_cutoffs in Hstep.
+      specialize (Hstep RetNone).
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate. }
+    { destruct Hrequire as (wst'' & events' & Hstep).
+      erewrite H0; try exact Hstep. clear H0.
+      unfold RingCanceller.RingCanceller.set_trading_pair_cutoffs in Hstep.
+      specialize (Hstep RetNone).
+      erewrite TradeDelegate_owner_not_changed_if_not_killed; eauto.
+      intros. intro. discriminate. }
+  }
+  { eapply TradeDelegate_owner_not_changed_if_not_killed; eauto.
+    intros. intro. eapply Hnotkill. rewrite H. unfold MsgKill. eauto. }
+  { erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto. }
+  { erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
   { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
       simpl in *; intuition; subst; auto. }
   { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
       simpl in *; intuition; subst; auto. }
   { destruct msg; destruct Hstep as [Hrequire [Htrans _]];
       inv Htrans; simpl in *; intuition; subst; auto.
-    admit.
-  }
-  { admit. }
+    inv H1.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
+  { (* BrokerInterceptor *)
+    admit. }
 Admitted.
 
 Theorem only_owner_is_able_to_control_LPSC:
