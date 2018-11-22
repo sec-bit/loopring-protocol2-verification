@@ -102,6 +102,26 @@ Module RingSubmitter.
           mining_rt_interceptor: address;
         }.
 
+    Record Fees :=
+      {
+        fee_wallet:      uint;
+        fee_miner:       uint;
+        fee_wallet_burn: uint;
+        fee_miner_burn:  uint;
+        fee_refund_base: uint;
+        fee_rebate:      uint;
+      }.
+
+    Definition zero_fees: Fees :=
+      {|
+        fee_wallet      := 0;
+        fee_miner       := 0;
+        fee_wallet_burn := 0;
+        fee_miner_burn  := 0;
+        fee_refund_base := 0;
+        fee_rebate      := 0;
+      |}.
+
     Record Participation :=
       mk_participation {
           part_order_idx: nat; (* index in another order list *)
@@ -114,6 +134,10 @@ Module RingSubmitter.
           part_rebateB: uint;
           part_fillAmountS: uint;
           part_fillAmountB: uint;
+          (* internal fields used in Coq model *)
+          part_fee: Fees;
+          part_feeS: Fees;
+          part_feeB: Fees;
         }.
 
     Record RingRuntimeState :=
@@ -177,6 +201,9 @@ Module RingSubmitter.
         part_rebateB := 0;
         part_fillAmountS := 0;
         part_fillAmountB := 0;
+        part_fee := zero_fees;
+        part_feeS := zero_fees;
+        part_feeB := zero_fees;
       |}.
 
     Fixpoint make_participations (ord_indices: list nat): list Participation :=
@@ -527,6 +554,9 @@ Module RingSubmitter.
         part_rebateB     := part_rebateB     p;
         part_fillAmountS := amountS;
         part_fillAmountB := amountB;
+        part_fee         := part_fee         p;
+        part_feeS        := part_feeS        p;
+        part_feeB        := part_feeB        p;
       |}.
 
     Definition upd_part_fillAmountS
@@ -543,6 +573,9 @@ Module RingSubmitter.
         part_rebateB     := part_rebateB     p;
         part_fillAmountS := amountS;
         part_fillAmountB := part_fillAmountB p;
+        part_fee         := part_fee         p;
+        part_feeS        := part_feeS        p;
+        part_feeB        := part_feeB        p;
       |}.
 
     Definition upd_part_splitS
@@ -559,6 +592,9 @@ Module RingSubmitter.
         part_rebateB     := part_rebateB     p;
         part_fillAmountS := part_fillAmountS p;
         part_fillAmountB := part_fillAmountB p;
+        part_fee         := part_fee         p;
+        part_feeS        := part_feeS        p;
+        part_feeB        := part_feeB        p;
       |}.
 
     Definition upd_part_feeAmounts
@@ -575,6 +611,9 @@ Module RingSubmitter.
         part_rebateB     := part_rebateB     p;
         part_fillAmountS := part_fillAmountS p;
         part_fillAmountB := part_fillAmountB p;
+        part_fee         := part_fee         p;
+        part_feeS        := part_feeS        p;
+        part_feeB        := part_feeB        p;
       |}.
 
     Definition upd_part_rebates
@@ -591,6 +630,28 @@ Module RingSubmitter.
         part_rebateB     := amountB;
         part_fillAmountS := part_fillAmountS p;
         part_fillAmountB := part_fillAmountB p;
+        part_fee         := part_fee         p;
+        part_feeS        := part_feeS        p;
+        part_feeB        := part_feeB        p;
+      |}.
+
+    Definition upd_part_fees
+               (p: Participation) (fee feeS feeB: Fees)
+      : Participation :=
+      {|
+        part_order_idx   := part_order_idx   p;
+        part_splitS      := part_splitS      p;
+        part_feeAmount   := part_feeAmount   p;
+        part_feeAmountS  := part_feeAmountS  p;
+        part_feeAmountB  := part_feeAmountB  p;
+        part_rebateFee   := part_rebateFee   p;
+        part_rebateS     := part_rebateS     p;
+        part_rebateB     := part_rebateB     p;
+        part_fillAmountS := part_fillAmountS p;
+        part_fillAmountB := part_fillAmountB p;
+        part_fee         := fee;
+        part_feeS        := feeS;
+        part_feeB        := feeB;
       |}.
 
   End RunTimeState.
@@ -2203,6 +2264,187 @@ Module RingSubmitter.
         |}.
 
     End ValidateAllOrNone.
+
+    Section CalculatePayments.
+
+      Definition get_fees_p2p_nowallet
+                 (ord: OrderRuntimeState) (total: uint) : Fees :=
+        {|
+          fee_wallet      := 0;
+          fee_miner       := 0;
+          fee_wallet_burn := 0;
+          fee_miner_burn  := 0;
+          fee_refund_base := 0;
+          fee_rebate      := total;
+        |}.
+
+      Definition get_fees_others
+                 (ord: OrderRuntimeState)
+                 (total burn_rate wallet_percentage refund_percentage: uint)
+        : Fees :=
+        let order := ord_rt_order ord in
+        let wallet_fee_total := total * wallet_percentage / 100 in
+        let wallet_fee := wallet_fee_total * (1 - burn_rate / FEE_PERCENTAGE_BASE_N) in
+        let wallet_fee_burn := wallet_fee_total * burn_rate / FEE_PERCENTAGE_BASE_N in
+        match order_waiveFeePercentage order with
+        | Z.neg _ =>
+          {|
+            fee_wallet      := wallet_fee;
+            fee_wallet_burn := wallet_fee_burn;
+            fee_miner       := 0;
+            fee_miner_burn  := 0;
+            fee_refund_base := 0;
+            fee_rebate      := total - wallet_fee - wallet_fee_burn;
+          |}
+        | _ =>
+          let miner_fee_total := total * (1 - wallet_percentage / 100) in
+          let miner_fee_burn := miner_fee_total * burn_rate / FEE_PERCENTAGE_BASE_N in
+          let miner_fee_base := miner_fee_total * (1 - burn_rate / FEE_PERCENTAGE_BASE_N) in
+          let miner_fee := miner_fee_base * (1 - refund_percentage / FEE_PERCENTAGE_BASE_N) in
+          {|
+            fee_wallet      := wallet_fee;
+            fee_wallet_burn := wallet_fee_burn;
+            fee_miner       := miner_fee;
+            fee_miner_burn  := miner_fee_burn;
+            fee_refund_base := miner_fee_base;
+            fee_rebate      := total - wallet_fee - wallet_fee_burn - miner_fee - miner_fee_burn;
+          |}
+        end.
+
+      Parameter get_token_rate: address -> uint.
+
+      Definition get_fees_for_order
+                 (ord: OrderRuntimeState) (total: uint) (token: address)
+                 (refund_percentage: uint)
+        : Fees :=
+        let order := ord_rt_order ord in
+        let p2p := ord_rt_p2p ord in
+        let zero_wallet := Nat.eqb (order_wallet order) 0 in
+        if p2p && zero_wallet  then
+          get_fees_p2p_nowallet ord total
+        else
+          let wallet_percentage := if p2p then
+                                     100
+                                   else
+                                     if zero_wallet then
+                                       0
+                                     else
+                                       order_walletSplitPercentage order in
+          get_fees_others ord total (get_token_rate token)
+                          wallet_percentage refund_percentage.
+
+      Definition get_fees_for_participation
+                 (p: Participation) (orders: list OrderRuntimeState)
+                 (refund_percentage: uint)
+        : option Participation :=
+        match nth_error orders (part_order_idx p) with
+        | None => None (* invalid case *)
+        | Some ord =>
+          let order := ord_rt_order ord in
+          Some (upd_part_fees
+                  p
+                  (get_fees_for_order ord (part_feeAmount p) (order_feeToken order) refund_percentage)
+                  (get_fees_for_order ord (part_feeAmountS p) (order_tokenS order) refund_percentage)
+                  (get_fees_for_order ord (part_feeAmountB p) (order_tokenB order) refund_percentage))
+        end.
+
+      Fixpoint get_fees_for_participations
+               (ps: list Participation) (orders: list OrderRuntimeState)
+               (refund_percentage: uint)
+        : option (list Participation) :=
+        match ps with
+        | nil => Some nil
+        | p :: ps' =>
+          match get_fees_for_participation p orders refund_percentage with
+          | None => None (* invalid case *)
+          | Some p' =>
+            match get_fees_for_participations ps' orders refund_percentage with
+            | None => None (* invalid case *)
+            | Some ps' => Some (p' :: ps')
+            end
+          end
+        end.
+
+      Definition get_fees_for_ring
+                 (r: RingRuntimeState) (orders: list OrderRuntimeState)
+        : option RingRuntimeState :=
+        match get_fees_for_participations
+                (ring_rt_participations r)
+                orders
+                (ring_minerFeesToOrdersPercentage (ring_rt_static r)) with
+        | None => None (* invalid case *)
+        | Some ps' => Some (upd_ring_participations r ps')
+        end.
+
+      Record Payments :=
+        {
+          pay_buyer_amountS:    uint;
+          pay_holder_amountFee: uint;
+          pay_holder_amountS:   uint;
+          pay_splitS:           uint;
+        }.
+
+      Definition get_payments_for_participation
+                 (pp p: Participation) (orders: list OrderRuntimeState)
+        : option Payments :=
+        match (nth_error orders (part_order_idx pp),
+               nth_error orders (part_order_idx p)) with
+        | (None, _) => None (* invalid case *)
+        | (_, None) => None (* invalid case *)
+        | (Some pp_ord, Some p_ord) =>
+          let p_order := ord_rt_order p_ord in
+          let pp_fee := part_fee pp in
+          let pp_feeB := part_feeB pp in
+          let p_fee := part_fee p in
+          let p_feeS := part_feeS p in
+          let p_fillAmountS := part_fillAmountS p in
+          let p_feeAmountS := part_feeAmountS p in
+          let pp_feeAmountB := part_feeAmountB pp in
+          let pp_rebateB := fee_rebate pp_feeB in
+          let buyer_amountS := p_fillAmountS - p_feeAmountS - (pp_feeAmountB - pp_rebateB) in
+          let p_rebateS := fee_rebate p_feeS in
+          let p_feeAmount := part_feeAmount p in
+          let p_rebateFee := fee_rebate p_fee in
+          let p_splitS := part_splitS p in
+          if Nat.eqb (order_tokenS p_order) (order_feeToken p_order) then
+            Some
+              {|
+                pay_buyer_amountS    := buyer_amountS;
+                pay_holder_amountFee := 0;
+                pay_holder_amountS   := p_feeAmountS - p_rebateS + (pp_feeAmountB - pp_rebateB) + (p_feeAmount - p_rebateFee);
+                pay_splitS           := p_splitS;
+              |}
+          else
+            Some
+              {|
+                pay_buyer_amountS    := buyer_amountS;
+                pay_holder_amountFee := p_feeAmount - p_rebateFee;
+                pay_holder_amountS   := p_feeAmountS - p_rebateS + (pp_feeAmountB - pp_rebateB);
+                pay_splitS           := p_splitS;
+              |}
+        end.
+
+      Fixpoint get_payments_for_participations
+               (pps ps: list Participation) (orders: list OrderRuntimeState)
+        : option (list Payments) :=
+        match ps with
+        | nil => Some nil
+        | p :: ps' =>
+          match get_pp pps ps with
+          | None => None (* invalid case *)
+          | Some pp =>
+            match get_payments_for_participation pp p orders with
+            | None => None (* invalid case *)
+            | Some pay =>
+              match get_payments_for_participations (pps ++ p :: nil) ps' orders with
+              | None => None (* invalid case *)
+              | Some pays => Some (pay :: pays)
+              end
+            end
+          end
+        end.
+
+    End CalculatePayments.
 
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
