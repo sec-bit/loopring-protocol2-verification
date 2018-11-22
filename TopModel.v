@@ -7,6 +7,7 @@ Require Import
         States
         Types.
 Require Import
+        BrokerInterceptor
         BrokerRegistry
         ERC20
         FeeHolder
@@ -47,6 +48,9 @@ Definition lr_step
 
   | MsgBurnRateTable msg' =>
     BurnRateTable.model wst msg' wst' retval events
+
+  | MsgBrokerInterceptor msg' =>
+    BrokerInterceptor.model wst msg' wst' retval events
   end.
 
 Inductive lr_steps (wst: WorldState) (msgs: list Message)

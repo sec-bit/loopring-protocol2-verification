@@ -135,15 +135,25 @@ Section BurnRateTable.
   | msg_getBurnRate (sender: address) (token: address)
   | msg_getTokenTier (sender: address) (token: address)
   | msg_upgradeTokenTier (sender: address) (token: address)
-  (* [getRebateRate], 
-   [lock], 
-   [withdraw], 
-   [getBalance], 
-   [getWithdrawablebalance],  
+  (* [getRebateRate],
+   [lock],
+   [withdraw],
+   [getBalance],
+   [getWithdrawablebalance],
    [getLockStartTime]
    are not implemented *).
 
 End BurnRateTable.
+
+Section BrokerInterceptor.
+
+  Inductive BrokerInterceptorMsg : Type :=
+  | msg_getAllowanceSafe (sender interceptor owner broker token: address)
+  | msg_onTokenSpentSafe (sender interceptor owner broker token: address) (amount: uint)
+  .
+
+End BrokerInterceptor.
+
 
 Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
@@ -154,5 +164,6 @@ Inductive Message : Type :=
 | MsgBrokerRegistry (msg: BrokerRegistryMsg)
 | MsgOrderRegistry (msg: OrderRegistryMsg)
 | MsgBurnRateTable (msg: BurnRateTableMsg)
+| MsgBrokerInterceptor (msg: BrokerInterceptorMsg)
 (* TODO: add messages of other LPSC contracts *)
 .
