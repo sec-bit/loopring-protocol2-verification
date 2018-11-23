@@ -799,11 +799,11 @@ Module RingSubmitter.
                  (spendable: Spendable)
                  (events: list Event) : Prop :=
         forall order wst'' allowance events'',
-          order = ord_rt_order ord ->
+          order = ord_rt_order ord /\
           __proxy_get_allowance_success
             wst
             (order_broker order) (order_owner order) token (ord_rt_brokerInterceptor ord)
-            wst'' allowance events'' ->
+            wst'' allowance events'' /\
           wst' = wst'' /\
           events = events'' /\
           spendable = mk_spendable true allowance 0.
@@ -2145,29 +2145,29 @@ Module RingSubmitter.
           wst4 st4 r4 events4
           wst5 st5 r5 events5,
           (* init *)
-          ring_init_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 ->
+          ring_init_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 /\
           (* adjust fill amounts *)
           r2 = upd_ring_participations
                    r1
                    (adjust_orders_fill_amounts (ring_rt_participations r1)
-                                               (submitter_rt_orders st1)) ->
-          st2 = submitter_update_rings st1 (lrings ++ r2 :: rrings) ->
-          wst2 = wst1 ->
-          events2 = nil ->
+                                               (submitter_rt_orders st1)) /\
+          st2 = submitter_update_rings st1 (lrings ++ r2 :: rrings) /\
+          wst2 = wst1 /\
+          events2 = nil /\
           (* reserve fill amountS *)
-          st3 = reserve_orders_fillAmounts st2 r2 ->
-          r3 = r2 ->
-          wst3 = wst2 ->
-          events3 = nil ->
+          st3 = reserve_orders_fillAmounts st2 r2 /\
+          r3 = r2 /\
+          wst3 = wst2 /\
+          events3 = nil /\
           (* calc fees and waive *)
-          calc_orders_fees_and_waive st3 r3 lrings rrings = Some (st4, r4) ->
-          wst4 = wst3 ->
-          events4 = nil ->
+          calc_orders_fees_and_waive st3 r3 lrings rrings = Some (st4, r4) /\
+          wst4 = wst3 /\
+          events4 = nil /\
           (* clear reservations *)
-          clear_orders_reservations st4 (ring_rt_participations r4) = Some st5 ->
-          r5 = r4 ->
-          wst5 = wst4 ->
-          events5 = nil ->
+          clear_orders_reservations st4 (ring_rt_participations r4) = Some st5 /\
+          r5 = r4 /\
+          wst5 = wst4 /\
+          events5 = nil /\
           (* final *)
           wst' = wst5 /\ st' = st5 /\ r' = r5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
 
@@ -2765,13 +2765,13 @@ Module RingSubmitter.
         : Prop :=
         forall fee_payments token_payments
           wst1 events1 wst2 events2,
-          make_payments wst st = Some (fee_payments, token_payments) ->
+          make_payments wst st = Some (fee_payments, token_payments) /\
           TradeDelegate.model
             wst (msg_batchTransfer (wst_ring_submitter_addr wst) token_payments)
-            wst1 RetNone events1 ->
+            wst1 RetNone events1 /\
           FeeHolder.model
             wst1 (msg_batchAddFeeBalances (wst_ring_submitter_addr wst) fee_payments)
-            wst2 RetNone events2 ->
+            wst2 RetNone events2 /\
           wst' = wst2 /\ events = events1 ++ events2.
 
       Definition calc_and_make_payments_subspec
