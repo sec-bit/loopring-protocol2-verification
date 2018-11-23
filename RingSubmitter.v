@@ -2376,73 +2376,272 @@ Module RingSubmitter.
         | Some ps' => Some (upd_ring_participations r ps')
         end.
 
-      Record Payments :=
-        {
-          pay_buyer_amountS:    uint;
-          pay_holder_amountFee: uint;
-          pay_holder_amountS:   uint;
-          pay_splitS:           uint;
-        }.
+      Fixpoint make_miner_fee_refund_payments
+               (base: uint)
+               (_p: Participation)
+               (ps: list Participation)
+               (orders: list OrderRuntimeState)
+               (token: address)
+        : option (list FeeBalanceParam) :=
+        let _p_ord_idx := part_order_idx _p in
+        match ps with
+        | nil => Some nil
+        | p :: ps' =>
+          let p_ord_idx := part_order_idx p in
+          match Nat.eqb p_ord_idx _p_ord_idx with
+          | true => make_miner_fee_refund_payments base _p ps' orders token
+          | false =>
+            match nth_error orders p_ord_idx with
+            | None => None (* invalid case *)
+            | Some ord =>
+              let order := ord_rt_order ord in
+              let waive_percentage := order_waiveFeePercentage order in
+              match waive_percentage with
+              | Z.neg _ =>
+                let payment := {| feeblncs_token := token;
+                                  feeblncs_owner := order_owner order;
+                                  feeblncs_value := base * (Z.abs_nat waive_percentage) / FEE_PERCENTAGE_BASE_N;
+                               |} in
+                match make_miner_fee_refund_payments base _p ps' orders token with
+                | None => None (* invalid case *)
+                | Some payments => Some (payment :: payments)
+                end
+              | _ => make_miner_fee_refund_payments base _p ps' orders token
+              end
+            end
+          end
+        end.
 
-      Definition get_payments_for_participation
-                 (pp p: Participation) (orders: list OrderRuntimeState)
-        : option Payments :=
+      Definition _make_feepayments
+                 (fees: Fees)
+                 (p: Participation)
+                 (ps: list Participation)
+                 (orders: list OrderRuntimeState)
+                 (token wallet: address)
+                 (fee_holder_addr miner_fee_recipient: address)
+        : option (list FeeBalanceParam) :=
+        match fees with
+        | Build_Fees wallet_fee miner_fee wallet_fee_burn miner_fee_burn refund_base rebate =>
+          let wallet_fee_pay := {| feeblncs_token := token;
+                                   feeblncs_owner := wallet;
+                                   feeblncs_value := wallet_fee;
+                                |} in
+          let burn_pay := {| feeblncs_token := token;
+                             feeblncs_owner := fee_holder_addr;
+                             feeblncs_value := wallet_fee_burn + miner_fee_burn;
+                          |} in
+          let miner_fee_pay := {| feeblncs_token := token;
+                                  feeblncs_owner := miner_fee_recipient;
+                                  feeblncs_value := miner_fee;
+                               |} in
+          match make_miner_fee_refund_payments refund_base p ps orders token with
+          | None => None (* invalid case *)
+          | Some miner_fee_refund_pays =>
+            Some (wallet_fee_pay :: burn_pay :: miner_fee_pay :: miner_fee_refund_pays)
+          end
+        end.
+
+      Definition make_feepayments_for_participation
+                 (p: Participation)
+                 (ps: list Participation)
+                 (orders: list OrderRuntimeState)
+                 (fee_holder_addr miner_fee_recipient: address)
+        : option (list FeeBalanceParam) :=
+        match nth_error orders (part_order_idx p) with
+        | None => None (* invalid case *)
+        | Some ord =>
+          let order := ord_rt_order ord in
+          let wallet := order_wallet order in
+          match _make_feepayments (part_fee p) p ps orders
+                                  (order_feeToken order) wallet
+                                  fee_holder_addr miner_fee_recipient with
+          | None => None (* invalid case *)
+          | Some fee_payments =>
+            match _make_feepayments (part_feeS p) p ps orders
+                                    (order_tokenS order) wallet
+                                    fee_holder_addr miner_fee_recipient with
+            | None => None (* invalid case *)
+            | Some feeS_payments =>
+              match _make_feepayments (part_feeB p) p ps orders
+                                      (order_tokenB order) wallet
+                                      fee_holder_addr miner_fee_recipient with
+              | None => None (* invalid case *)
+              | Some feeB_payments => Some (fee_payments ++ feeS_payments ++ feeB_payments)
+              end
+            end
+          end
+        end.
+
+      Fixpoint make_feepayments_for_participations
+               (pps ps: list Participation)
+               (orders: list OrderRuntimeState)
+               (fee_holder_addr miner_fee_recipient: address)
+        : option (list FeeBalanceParam) :=
+        match ps with
+        | nil => Some nil
+        | p :: ps' =>
+          match make_feepayments_for_participation
+                  p (pps ++ ps) orders
+                  fee_holder_addr miner_fee_recipient with
+          | None => None (* invalid case *)
+          | Some payments =>
+            match make_feepayments_for_participations
+                    (pps ++ p :: nil) ps' orders
+                    fee_holder_addr miner_fee_recipient with
+            | None => None (*invalid case *)
+            | Some payments' => Some (payments ++ payments')
+            end
+          end
+        end.
+
+      Definition make_feepayments_for_ring
+                 (r: RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+                 (fee_holder_addr miner_fee_recipient: address)
+        : option (list FeeBalanceParam) :=
+        make_feepayments_for_participations
+          nil (ring_rt_participations r) orders fee_holder_addr miner_fee_recipient.
+
+      Definition make_tokenpayments_for_participation
+                 (pp p: Participation)
+                 (orders: list OrderRuntimeState)
+                 (fee_holder_addr miner_fee_recipient: address)
+        : option (list TransferParam) :=
         match (nth_error orders (part_order_idx pp),
                nth_error orders (part_order_idx p)) with
         | (None, _) => None (* invalid case *)
         | (_, None) => None (* invalid case *)
         | (Some pp_ord, Some p_ord) =>
           let p_order := ord_rt_order p_ord in
-          let pp_fee := part_fee pp in
-          let pp_feeB := part_feeB pp in
-          let p_fee := part_fee p in
-          let p_feeS := part_feeS p in
+          let pp_order := ord_rt_order pp_ord in
           let p_fillAmountS := part_fillAmountS p in
-          let p_feeAmountS := part_feeAmountS p in
-          let pp_feeAmountB := part_feeAmountB pp in
-          let pp_rebateB := fee_rebate pp_feeB in
-          let buyer_amountS := p_fillAmountS - p_feeAmountS - (pp_feeAmountB - pp_rebateB) in
-          let p_rebateS := fee_rebate p_feeS in
           let p_feeAmount := part_feeAmount p in
-          let p_rebateFee := fee_rebate p_fee in
-          let p_splitS := part_splitS p in
-          if Nat.eqb (order_tokenS p_order) (order_feeToken p_order) then
-            Some
-              {|
-                pay_buyer_amountS    := buyer_amountS;
-                pay_holder_amountFee := 0;
-                pay_holder_amountS   := p_feeAmountS - p_rebateS + (pp_feeAmountB - pp_rebateB) + (p_feeAmount - p_rebateFee);
-                pay_splitS           := p_splitS;
-              |}
-          else
-            Some
-              {|
-                pay_buyer_amountS    := buyer_amountS;
-                pay_holder_amountFee := p_feeAmount - p_rebateFee;
-                pay_holder_amountS   := p_feeAmountS - p_rebateS + (pp_feeAmountB - pp_rebateB);
-                pay_splitS           := p_splitS;
-              |}
+          let p_feeAmountS := part_feeAmountS p in
+          let p_rebateFee := fee_rebate (part_fee p) in
+          let p_rebateS := fee_rebate (part_feeS p) in
+          let pp_feeAmountB := part_feeAmountB pp in
+          let pp_rebateB := fee_rebate (part_feeB pp) in
+          let splitS_payment := {| transfer_token  := order_tokenS p_order;
+                                   transfer_from   := order_owner p_order;
+                                   transfer_to     := miner_fee_recipient;
+                                   transfer_amount := part_splitS p;
+                                |} in
+          let buyerS_payment := {| transfer_token  := order_tokenS p_order;
+                                   transfer_from   := order_owner p_order;
+                                   transfer_to     := order_tokenRecipient pp_order;
+                                   transfer_amount := p_fillAmountS - p_feeAmountS -
+                                                      (pp_feeAmountB - pp_rebateB);
+                                |} in
+          let (holderFee_payment, holderS_payment) :=
+              if Nat.eqb (order_tokenS p_order) (order_feeToken p_order) then
+                (
+                  {|
+                    transfer_token  := order_feeToken p_order;
+                    transfer_from   := order_owner p_order;
+                    transfer_to     := fee_holder_addr;
+                    transfer_amount := 0;
+                  |},
+
+                  {|
+                    transfer_token  := order_tokenS p_order;
+                    transfer_from   := order_owner p_order;
+                    transfer_to     := fee_holder_addr;
+                    transfer_amount := p_feeAmountS - p_rebateS +
+                                       (pp_feeAmountB - pp_rebateB) +
+                                       (p_feeAmount - p_rebateFee);
+                  |}
+                )
+              else
+                (
+                  {|
+                    transfer_token  := order_feeToken p_order;
+                    transfer_from   := order_owner p_order;
+                    transfer_to     := fee_holder_addr;
+                    transfer_amount := p_feeAmount - p_rebateFee;
+                  |},
+
+                  {|
+                    transfer_token  := order_tokenS p_order;
+                    transfer_from   := order_owner p_order;
+                    transfer_to     := fee_holder_addr;
+                    transfer_amount := p_feeAmountS - p_rebateS +
+                                       (pp_feeAmountB - pp_rebateB);
+                  |}
+                )
+          in Some (splitS_payment :: buyerS_payment :: holderFee_payment :: holderS_payment :: nil)
         end.
 
-      Fixpoint get_payments_for_participations
-               (pps ps: list Participation) (orders: list OrderRuntimeState)
-        : option (list Payments) :=
+      Fixpoint make_tokenpayments_for_participations
+               (pps ps: list Participation)
+               (orders: list OrderRuntimeState)
+               (fee_holder_addr miner_fee_recipient: address)
+        : option (list TransferParam) :=
         match ps with
         | nil => Some nil
         | p :: ps' =>
           match get_pp pps ps with
           | None => None (* invalid case *)
           | Some pp =>
-            match get_payments_for_participation pp p orders with
+            match make_tokenpayments_for_participation
+                    pp p orders fee_holder_addr miner_fee_recipient with
             | None => None (* invalid case *)
-            | Some pay =>
-              match get_payments_for_participations (pps ++ p :: nil) ps' orders with
+            | Some payments =>
+              match make_tokenpayments_for_participations
+                      (pps ++ p :: nil) ps' orders
+                      fee_holder_addr miner_fee_recipient with
               | None => None (* invalid case *)
-              | Some pays => Some (pay :: pays)
+              | Some payments' => Some (payments ++ payments')
               end
             end
           end
         end.
+
+      Definition make_tokenpayments_for_ring
+                 (r: RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+                 (fee_holder_addr miner_fee_recipient: address)
+        : option (list TransferParam) :=
+        make_tokenpayments_for_participations
+          nil (ring_rt_participations r) orders fee_holder_addr miner_fee_recipient.
+
+      Fixpoint make_payments_for_rings
+               (rings: list RingRuntimeState)
+               (orders: list OrderRuntimeState)
+               (fee_holder_addr miner_fee_recipient: address)
+        : option (list FeeBalanceParam * list TransferParam) :=
+        match rings with
+        | nil => Some (nil, nil)
+        | r :: rings' =>
+          match get_fees_for_ring r orders with
+          | None => None (* invalid case *)
+          | Some r' =>
+            match make_feepayments_for_ring
+                    r' orders fee_holder_addr miner_fee_recipient with
+            | None => None (* invalid case *)
+            | Some fee_payments =>
+              match make_tokenpayments_for_ring
+                      r' orders fee_holder_addr miner_fee_recipient with
+              | None => None (* invalid case *)
+              | Some token_payments =>
+                match make_payments_for_rings
+                        rings' orders fee_holder_addr miner_fee_recipient with
+                | None => None (* invalid case *)
+                | Some (fee_payments', token_payments') =>
+                  Some (fee_payments ++ fee_payments',
+                        token_payments' ++ token_payments')
+                end
+              end
+            end
+          end
+        end.
+
+      Definition make_payments (wst: WorldState) (st: RingSubmitterRuntimeState)
+        : option (list FeeBalanceParam * list TransferParam) :=
+        make_payments_for_rings (submitter_rt_rings st)
+                                (submitter_rt_orders st)
+                                (wst_feeholder_addr wst)
+                                (mining_feeRecipient
+                                   (mining_rt_static (submitter_rt_mining st))).
 
     End CalculatePayments.
 
