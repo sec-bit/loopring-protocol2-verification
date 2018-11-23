@@ -1652,28 +1652,33 @@ Module RingSubmitter.
 
     Section CalculateFillsAndFees.
 
-      Definition ring_orders_valid
-                 (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
-        ring_rt_valid r = true /\
-        let ps := ring_rt_participations r in
-        1 < length ps <= 8 /\
-        forall p,
-          In p ps ->
-          let ord_idx := part_order_idx p in
-          forall order,
-            nth_error orders ord_idx = Some order ->
-            ord_rt_valid order = true.
+      Section PreCheckRingValid.
 
-      Definition ring_has_subrings
-                 (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
-        exists p p',
-          p <> p' /\
-          In p (ring_rt_participations r) /\
-          In p' (ring_rt_participations r) /\
-          forall ord ord',
-            nth_error orders (part_order_idx p) = Some ord ->
-            nth_error orders (part_order_idx p') = Some ord' ->
-            order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
+        Definition ring_orders_valid
+                   (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
+          ring_rt_valid r = true /\
+          let ps := ring_rt_participations r in
+          1 < length ps <= 8 /\
+          forall p,
+            In p ps ->
+            let ord_idx := part_order_idx p in
+            forall order,
+              nth_error orders ord_idx = Some order ->
+              ord_rt_valid order = true.
+
+        Definition ring_has_subrings
+                   (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
+          exists p p',
+            p <> p' /\
+            In p (ring_rt_participations r) /\
+            In p' (ring_rt_participations r) /\
+            forall ord ord',
+              nth_error orders (part_order_idx p) = Some ord ->
+              nth_error orders (part_order_idx p') = Some ord' ->
+              order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
+
+      End PreCheckRingValid.
+
 
       Parameter ring_init_orders_max_fill_amounts:
         WorldState (* pre world state *) ->
