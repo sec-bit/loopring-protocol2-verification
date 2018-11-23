@@ -1679,18 +1679,83 @@ Module RingSubmitter.
 
       End PreCheckRingValid.
 
+      Section InitMaxFillAmounts.
 
-      Parameter ring_init_orders_max_fill_amounts:
-        WorldState (* pre world state *) ->
-        RingSubmitterRuntimeState (* pre ring submitter state *) ->
-        RingRuntimeState (* ring *) ->
-        list RingRuntimeState (* rings on the left *) ->
-        list RingRuntimeState (* rings on the right *) ->
-        WorldState (* post world state *) ->
-        RingSubmitterRuntimeState (* post ring submitter state *) ->
-        RingRuntimeState (* post ring state *) ->
-        list Event ->
-        Prop.
+        Definition _init_fill_amounts
+                   (p: Participation)
+                   (ord: OrderRuntimeState)
+                   (spendableS: Spendable)
+        : Participation :=
+          let order := ord_rt_order ord in
+          let amountS := min (spendable_amount spendableS)
+                             (order_amountS order - ord_rt_filledAmountS ord) in
+          let amountB := part_fillAmountS p * order_amountB order / order_amountS order in
+          upd_part_fillAmounts p amountS amountB.
+
+        Definition ring_init_participation_max_fill_amounts
+                   (wst: WorldState)
+                   (st: RingSubmitterRuntimeState)
+                   (r: RingRuntimeState)
+                   (lrings rrings: list RingRuntimeState)
+                   (p: Participation)
+                   (lps rps: list Participation)
+                   (wst': WorldState)
+                   (st': RingSubmitterRuntimeState)
+                   (r': RingRuntimeState)
+                   (p': Participation)
+                   (events: list Event)
+        : Prop :=
+          forall ord wst1 st1 spendableS events1 p' r',
+            nth_error (submitter_rt_orders st) (part_order_idx p) = Some ord /\
+            get_tokenSpendableS wst st ord wst1 st1 spendableS events1 /\
+            p' = _init_fill_amounts p ord spendableS /\
+            r' = upd_ring_participations r (lps ++ p' :: rps) /\
+            st' = submitter_update_rings st1 (lrings ++ r' :: rrings) /\
+            wst' = wst1 /\
+            events = events1.
+
+        Inductive ring_init_participations_max_fill_amounts
+                  (wst: WorldState)
+                  (st: RingSubmitterRuntimeState)
+                  (r: RingRuntimeState)
+                  (lrings rrings: list RingRuntimeState)
+                  (pps: list Participation)
+          : list Participation (* remaining participations  *) ->
+            WorldState (* post world state *) ->
+            RingSubmitterRuntimeState  (* post ring submitter state *) ->
+            RingRuntimeState (* post ring state *) ->
+            list Event (* events generated *) ->
+            Prop :=
+        | RingInitPsMaxFillAmounts_nil:
+            ring_init_participations_max_fill_amounts
+              wst st r lrings rrings pps nil wst st r nil
+
+        | RingInitPsMaxFillAmounts_cons:
+            forall p ps
+              wst1 st1 r1 p1 events1
+              wst2 st2 r2 events2,
+              ring_init_participation_max_fill_amounts
+                wst st r lrings rrings p pps ps wst1 st1 r1 p1 events1 ->
+              ring_init_participations_max_fill_amounts
+                wst1 st1 r1 lrings rrings (pps ++ p1 :: nil) ps wst2 st2 r2 events2 ->
+              ring_init_participations_max_fill_amounts
+                wst st r lrings rrings pps (p :: ps) wst2 st2 r2 (events1 ++ events2)
+        .
+
+        Definition ring_init_max_fill_amounts
+                   (wst: WorldState)
+                   (st: RingSubmitterRuntimeState)
+                   (r: RingRuntimeState)
+                   (lrings rrings: list RingRuntimeState)
+                   (wst': WorldState)
+                   (st': RingSubmitterRuntimeState)
+                   (r': RingRuntimeState)
+                   (events: list Event)
+          : Prop :=
+          ring_init_participations_max_fill_amounts
+            wst st r lrings rrings nil (ring_rt_participations r) wst' st' r' events.
+
+      End InitMaxFillAmounts.
 
       (** Adjust fill amounts of `p` according to fillAmountS of `pp`.
           If `p` is adjust, return an option value of the adjusted `p`.
@@ -2080,7 +2145,7 @@ Module RingSubmitter.
           wst4 st4 r4 events4
           wst5 st5 r5 events5,
           (* init *)
-          ring_init_orders_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 ->
+          ring_init_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 ->
           (* adjust fill amounts *)
           r2 = upd_ring_participations
                    r1
