@@ -100,6 +100,7 @@ Section ERC20.
   | msg_transferFrom (sender token from to: address) (value: uint)
   | msg_approve (sender token spender: address) (value: uint)
   | msg_burnFrom (sender token from: address) (value: uint)
+  | msg_erc20_burn (sender token: address) (value: uint)
   .
 
 End ERC20.
@@ -145,6 +146,15 @@ Section BurnRateTable.
 
 End BurnRateTable.
 
+
+Section BurnManager.
+
+  Inductive BurnManagerMsg : Type :=
+  | msg_burn (sender: address) (token: address).
+
+End BurnManager.
+
+
 Section BrokerInterceptor.
 
   Inductive BrokerInterceptorMsg : Type :=
@@ -165,5 +175,6 @@ Inductive Message : Type :=
 | MsgOrderRegistry (msg: OrderRegistryMsg)
 | MsgBurnRateTable (msg: BurnRateTableMsg)
 | MsgBrokerInterceptor (msg: BrokerInterceptorMsg)
+| MsgBurnManager (msg: BurnManagerMsg)
 (* TODO: add messages of other LPSC contracts *)
 .

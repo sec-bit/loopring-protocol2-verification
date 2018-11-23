@@ -18,7 +18,7 @@ Module ERC20StateElem <: ElemType.
   Definition elt_zero :=
     {| erc20_balances := A2V.empty; erc20_allowed := AA2V.empty |}.
   Definition elt_eq := fun (x x': elt) => x = x'.
-  
+
   Lemma aa2v_slist_eq_dec (elt: Type) (elt_dec: forall x y: elt, {x = y} + {x <> y}) :
     forall sl1 sl2 : AA2V.map.slist elt, {sl1 = sl2} + {sl1 <> sl2}.
   Proof.
@@ -40,7 +40,7 @@ Module ERC20StateElem <: ElemType.
     left. subst. f_equal. apply ProofIrrelevance.proof_irrelevance.
     right. intro. apply n. inversion H; auto.
   Qed.
-  
+
   Lemma elt_eq_dec:
     forall (x y: elt), { x = y } + { ~ x = y }.
   Proof.
@@ -161,7 +161,7 @@ Module BrokersElem <: ElemType.
   Definition elt := Brokers.t.
   Definition elt_zero := Brokers.empty.
   Definition elt_eq := fun m m': elt => Brokers.map.Equal m m'.
-  
+
   Lemma slist_eq_dec (elt: Type) (elt_dec: forall x y: elt, {x = y} + {x <> y}) :
     forall sl1 sl2 : Brokers.map.slist elt, {sl1 = sl2} + {sl1 <> sl2}.
   Proof.
@@ -269,6 +269,14 @@ Record BlockState : Type :=
     }.
 
 
+(** State of burn manager *)
+Record BurnManagerState : Type :=
+  {
+    burnMgr_feeHolderAddress : address;
+    burnMgr_lrcAddress : address;
+  }.
+
+
 (** World state modeling all parties of Loopring protocol *)
 Record WorldState : Type :=
   mk_world_state {
@@ -296,7 +304,10 @@ Record WorldState : Type :=
       (* LPSC burn rate table contract *)
       wst_burn_rate_table_state: BurnRateTableState;
       wst_burn_rate_table_addr: address;
-      
+      (* LSC burn manager contract *)
+      wst_burn_manager_state: BurnManagerState;
+      wst_burn_manager_addr: address;
+
       (* state of the current block *)
       wst_block_state: BlockState;
 
@@ -322,6 +333,8 @@ Definition wst_update_trade_delegate
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -344,6 +357,8 @@ Definition wst_update_feeholder
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -367,6 +382,8 @@ Definition wst_update_erc20s
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -389,6 +406,8 @@ Definition wst_update_broker_registry
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -411,6 +430,8 @@ Definition wst_update_order_registry
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -433,6 +454,8 @@ Definition wst_update_ring_submitter
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := wst_burn_rate_table_state wst;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -455,5 +478,31 @@ Definition wst_update_burn_rate_table
     wst_order_registry_addr := wst_order_registry_addr wst;
     wst_burn_rate_table_state := st;
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_block_state := wst_block_state wst;
+  |}.
+
+Definition wst_update_burn_manager
+           (wst: WorldState) (st: BurnManagerState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := wst_ring_submitter_state wst;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
+    wst_burn_rate_table_state := wst_burn_rate_table_state wst;
+    wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := st;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
