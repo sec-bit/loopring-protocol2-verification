@@ -12,6 +12,7 @@ Require Import
         BrokerInterceptor
         BrokerRegistry
         ERC20
+        FeeHolder
         OrderRegistry
         TradeDelegate.
 
@@ -2645,6 +2646,95 @@ Module RingSubmitter.
 
     End CalculatePayments.
 
+    Section MakePayments.
+
+      Fixpoint sum_transfer_amount
+               (ts: list TransferParam) (token from to: address)
+      : uint :=
+        match ts with
+        | nil => 0
+        | t :: ts' =>
+          match t with
+          | mk_transfer_param t_token t_from t_to t_amount =>
+            if Nat.eqb t_token token &&
+               Nat.eqb t_from from &&
+               Nat.eqb t_to to then
+              t_amount + sum_transfer_amount ts' token from to
+            else
+              sum_transfer_amount ts' token from to
+          end
+        end.
+
+      Fixpoint sum_fee_amount
+               (fs: list FeeBalanceParam) (token owner: address)
+        : uint :=
+        match fs with
+        | nil => 0
+        | f :: fs' =>
+          match f with
+          | mk_fee_balance_param f_token f_owner f_amount =>
+            if Nat.eqb f_token token &&
+               Nat.eqb f_owner owner then
+              f_amount + sum_fee_amount fs' token owner
+            else
+              sum_fee_amount fs' token owner
+          end
+        end.
+
+      Definition calc_and_make_payments_require
+                 (fee_payments: list FeeBalanceParam)
+                 (token_payments: list TransferParam) : Prop :=
+        (forall token from to,
+            sum_transfer_amount token_payments token from to < MAX_UINT256) /\
+        (forall token owner,
+            sum_fee_amount fee_payments token owner < MAX_UINT256).
+
+      Definition calc_and_make_payments
+                 (wst: WorldState) (st: RingSubmitterRuntimeState)
+                 (wst': WorldState) (events: list Event)
+        : Prop :=
+        forall fee_payments token_payments
+          wst1 events1 wst2 events2,
+          make_payments wst st = Some (fee_payments, token_payments) ->
+          TradeDelegate.model
+            wst (msg_batchTransfer (wst_ring_submitter_addr wst) token_payments)
+            wst1 RetNone events1 ->
+          FeeHolder.model
+            wst1 (msg_batchAddFeeBalances (wst_ring_submitter_addr wst) fee_payments)
+            wst2 RetNone events2 ->
+          wst' = wst2 /\ events = events1 ++ events2.
+
+      Definition calc_and_make_payments_subspec
+                 (sender: address)
+                 (orders: list Order)
+                 (rings: list Ring)
+                 (mining: Mining) :=
+        {|
+          subspec_require :=
+            fun wst st =>
+              exists fee_payments token_payments,
+                make_payments wst st = Some (fee_payments, token_payments) /\
+                calc_and_make_payments_require fee_payments token_payments
+          ;
+
+          subspec_trans :=
+            fun wst st wst' st' =>
+              st' = st /\
+              forall wst'' events,
+                calc_and_make_payments wst st wst'' events ->
+                wst' = wst''
+          ;
+
+          subspec_events :=
+            fun wst st events =>
+              forall wst' events',
+                calc_and_make_payments wst st wst' events' ->
+                events = events'
+          ;
+        |}.
+
+    End MakePayments.
+
     Definition SubmitRingsSubSpec :=
       address -> list Order -> list Ring -> Mining -> SubSpec.
 
@@ -2713,7 +2803,8 @@ Module RingSubmitter.
            check_miner_signature_subspec ;;
            check_orders_dual_sig_subspec ;;
            calc_fills_and_fees_subspec ;;
-           validate_AllOrNone_subspec
+           validate_AllOrNone_subspec ;;
+           calc_and_make_payments_subspec
         )
         sender orders rings mining.
 
