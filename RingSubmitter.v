@@ -1667,8 +1667,8 @@ Module RingSubmitter.
             In p (ring_rt_participations r) /\
             In p' (ring_rt_participations r) /\
             forall ord ord',
-              nth_error orders (part_order_idx p) = Some ord ->
-              nth_error orders (part_order_idx p') = Some ord' ->
+              nth_error orders (part_order_idx p) = Some ord /\
+              nth_error orders (part_order_idx p') = Some ord' /\
               order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
 
       End PreCheckRingValid.
@@ -1791,7 +1791,7 @@ Module RingSubmitter.
                    | nil => (readj_ps, head :: adj_ps)
                    | _   => (head :: readj_ps, adj_ps)
                    end
-          | Some head' => (head :: readj_ps ++ adj_ps, nil)
+          | Some head' => (head' :: readj_ps ++ adj_ps, nil)
           end
 
         | p :: rem_ps' =>
@@ -1829,6 +1829,7 @@ Module RingSubmitter.
           end
         end.
 
+      (* pending_ps starts from the second order *)
       Fixpoint _adjust_orders_fill_amounts_rev_round_2
                (head prev: Participation)
                (adj_ps pending_ps rem_ps: list Participation)
