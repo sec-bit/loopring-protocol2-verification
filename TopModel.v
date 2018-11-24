@@ -12,6 +12,7 @@ Require Import
         BurnManager
         ERC20
         FeeHolder
+        OrderBook
         OrderRegistry
         RingSubmitter
         RingCanceller
@@ -55,6 +56,9 @@ Definition lr_step
 
   | MsgBurnManager msg' =>
     BurnManager.model wst msg' wst' retval events
+
+  | MsgOrderBook msg' =>
+    OrderBook.model wst msg' wst' retval events
   end.
 
 Inductive lr_steps (wst: WorldState) (msgs: list Message)
