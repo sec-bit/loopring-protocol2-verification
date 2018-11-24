@@ -1623,19 +1623,42 @@ Module RingSubmitter.
 
     Section CalculateFillsAndFees.
 
+      Definition get_pp (pps ps: list Participation) : option Participation :=
+        match ps with
+        | nil => None (* invalid case *)
+        | p :: ps' =>
+          match pps with
+          | nil => last_error ps
+          | _ => last_error pps
+          end
+        end.
+
       Section PreCheckRingValid.
+
+        Inductive _ring_orders_valid
+                  (orders: list OrderRuntimeState)
+                  (pps: list Participation)
+        : list Participation -> Prop :=
+        | RingOrdersValid_nil:
+            _ring_orders_valid orders pps nil
+
+        | RingOrdersValid_cons:
+            forall p ps pp p_ord pp_ord,
+              get_pp pps ps = Some pp ->
+              nth_error orders (part_order_idx p) = Some p_ord ->
+              nth_error orders (part_order_idx pp) = Some pp_ord ->
+              ord_rt_valid p_ord = true ->
+              order_tokenS (ord_rt_order p_ord) = order_tokenB (ord_rt_order pp_ord) ->
+              _ring_orders_valid orders (pps ++ p :: nil) ps ->
+              _ring_orders_valid orders pps (p :: ps)
+        .
 
         Definition ring_orders_valid
                    (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
           ring_rt_valid r = true /\
           let ps := ring_rt_participations r in
           1 < length ps <= 8 /\
-          forall p,
-            In p ps ->
-            let ord_idx := part_order_idx p in
-            forall order,
-              nth_error orders ord_idx = Some order ->
-              ord_rt_valid order = true.
+          _ring_orders_valid orders nil ps.
 
         Definition ring_has_subrings
                    (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
@@ -2024,16 +2047,6 @@ Module RingSubmitter.
                              (upd_part_feeAmounts p p_feeAmount 0 0)
                              p_splitS)
                           pp_fillAmountB)
-          end
-        end.
-
-      Definition get_pp (pps ps: list Participation) : option Participation :=
-        match ps with
-        | nil => None (* invalid case *)
-        | p :: ps' =>
-          match pps with
-          | nil => last_error ps
-          | _ => last_error pps
           end
         end.
 
