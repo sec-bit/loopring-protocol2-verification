@@ -1751,60 +1751,62 @@ Module RingSubmitter.
 
       End InitMaxFillAmounts.
 
-      (** Adjust fill amounts of `p` according to fillAmountS of `pp`.
+      Section AdjustFillAmounts.
+
+        (** Adjust fill amounts of `p` according to fillAmountS of `pp`.
           If `p` is adjust, return an option value of the adjusted `p`.
           Otherwise, return None.
-       *)
-      Definition adjust_order_fill_amounts_rev
-                 (pp p: Participation) (orders: list OrderRuntimeState)
+         *)
+        Definition adjust_order_fill_amounts_rev
+                   (pp p: Participation) (orders: list OrderRuntimeState)
         : option Participation :=
-        match (nth_error orders (part_order_idx pp),
-               nth_error orders (part_order_idx p)) with
-        | (None, _) => None (* impossible case *)
-        | (_, None) => None (* impossible case *)
-        | (Some pp_ord, Some p_ord) =>
-          let pp_tokenSFeePercentage :=
-              order_tokenSFeePercentage (ord_rt_order pp_ord) in
-          let pp_available_fillAmountS :=
-              part_fillAmountS pp * (1 - pp_tokenSFeePercentage/ FEE_PERCENTAGE_BASE_N) in
-          if Nat.ltb pp_available_fillAmountS (part_fillAmountB p) then
-            let p_order := ord_rt_order p_ord in
-            Some (upd_part_fillAmounts
-                    p
-                    (pp_available_fillAmountS * order_amountS p_order / order_amountB p_order)
-                    pp_available_fillAmountS)
-          else
-            None
-        end.
+          match (nth_error orders (part_order_idx pp),
+                 nth_error orders (part_order_idx p)) with
+          | (None, _) => None (* impossible case *)
+          | (_, None) => None (* impossible case *)
+          | (Some pp_ord, Some p_ord) =>
+            let pp_tokenSFeePercentage :=
+                order_tokenSFeePercentage (ord_rt_order pp_ord) in
+            let pp_available_fillAmountS :=
+                part_fillAmountS pp * (1 - pp_tokenSFeePercentage/ FEE_PERCENTAGE_BASE_N) in
+            if Nat.ltb pp_available_fillAmountS (part_fillAmountB p) then
+              let p_order := ord_rt_order p_ord in
+              Some (upd_part_fillAmounts
+                      p
+                      (pp_available_fillAmountS * order_amountS p_order / order_amountB p_order)
+                      pp_available_fillAmountS)
+            else
+              None
+          end.
 
-      (* rem_ps starts from the second order of the order ring. *)
-      Fixpoint _adjust_orders_fill_amounts_rev_round_1
-               (head prev: Participation)
-               (readj_ps adj_ps rem_ps: list Participation)
-               (orders: list OrderRuntimeState)
-        : list Participation * list Participation :=
-        match rem_ps with
-        | nil =>
-          (** have iterated over all orders, adjust the head order accordingly *)
-          match adjust_order_fill_amounts_rev prev head orders with
-          | None => match readj_ps with
-                   | nil => (readj_ps, head :: adj_ps)
-                   | _   => (head :: readj_ps, adj_ps)
-                   end
-          | Some head' => (head' :: readj_ps ++ adj_ps, nil)
-          end
+        (* rem_ps starts from the second order of the order ring. *)
+        Fixpoint _adjust_orders_fill_amounts_rev_round_1
+                 (head prev: Participation)
+                 (readj_ps adj_ps rem_ps: list Participation)
+                 (orders: list OrderRuntimeState)
+          : list Participation * list Participation :=
+          match rem_ps with
+          | nil =>
+            (** have iterated over all orders, adjust the head order accordingly *)
+            match adjust_order_fill_amounts_rev prev head orders with
+            | None => match readj_ps with
+                     | nil => (readj_ps, head :: adj_ps)
+                     | _   => (head :: readj_ps, adj_ps)
+                     end
+            | Some head' => (head' :: readj_ps ++ adj_ps, nil)
+            end
 
-        | p :: rem_ps' =>
-          (** on the half way of iterating the order ring *)
-          match adjust_order_fill_amounts_rev prev p orders with
-          | None    => _adjust_orders_fill_amounts_rev_round_1
-                        head p readj_ps (adj_ps ++ p :: nil) rem_ps' orders
-          | Some p' => _adjust_orders_fill_amounts_rev_round_1
-                        head p' (readj_ps ++ adj_ps ++ p' :: nil) nil rem_ps' orders
-          end
-        end.
+          | p :: rem_ps' =>
+            (** on the half way of iterating the order ring *)
+            match adjust_order_fill_amounts_rev prev p orders with
+            | None    => _adjust_orders_fill_amounts_rev_round_1
+                          head p readj_ps (adj_ps ++ p :: nil) rem_ps' orders
+            | Some p' => _adjust_orders_fill_amounts_rev_round_1
+                          head p' (readj_ps ++ adj_ps ++ p' :: nil) nil rem_ps' orders
+            end
+          end.
 
-      (** Adjust the fill amounts of an order ring.
+        (** Adjust the fill amounts of an order ring.
 
           In the process of adjustment, the order ring is separated
           into three segments:
@@ -1816,72 +1818,74 @@ Module RingSubmitter.
           - a list of orders that need to be re-adjusted
           - a list of remaining orders that have been adjusted and do
             not need re-adjustment.
-       *)
-      Definition adjust_orders_fill_amounts_rev_round_1
-                 (ps: list Participation) (orders: list OrderRuntimeState)
-        : list Participation * list Participation :=
-        match ps with
-        | nil => (nil, nil) (* invalid case: empty order ring *)
-        | p :: ps' =>
-          match ps' with
-          | nil => (nil, nil) (* invalid case: single-element order ring *)
-          | _ => _adjust_orders_fill_amounts_rev_round_1 p p nil nil ps' orders
-          end
-        end.
+         *)
+        Definition adjust_orders_fill_amounts_rev_round_1
+                   (ps: list Participation) (orders: list OrderRuntimeState)
+          : list Participation * list Participation :=
+          match ps with
+          | nil => (nil, nil) (* invalid case: empty order ring *)
+          | p :: ps' =>
+            match ps' with
+            | nil => (nil, nil) (* invalid case: single-element order ring *)
+            | _ => _adjust_orders_fill_amounts_rev_round_1 p p nil nil ps' orders
+            end
+          end.
 
-      (* pending_ps starts from the second order *)
-      Fixpoint _adjust_orders_fill_amounts_rev_round_2
-               (head prev: Participation)
-               (adj_ps pending_ps rem_ps: list Participation)
-               (orders: list OrderRuntimeState)
-        : list Participation :=
-        match pending_ps with
-        | nil =>
-          (** have iterated over all orders in pending_ps *)
-          match rem_ps with
+        (* pending_ps starts from the second order *)
+        Fixpoint _adjust_orders_fill_amounts_rev_round_2
+                 (head prev: Participation)
+                 (adj_ps pending_ps rem_ps: list Participation)
+                 (orders: list OrderRuntimeState)
+          : list Participation :=
+          match pending_ps with
           | nil =>
-            (** pending_ps covers the entire order ring *)
-            let head' := match adjust_order_fill_amounts_rev prev head orders with
-                         | None        => head
-                         | Some head'' => head''
-                         end
-            in head' :: adj_ps ++ rem_ps
-          | _ =>
-            (** pending_ps covers only the beginning portion of order ring *)
-            head :: adj_ps ++ rem_ps
-          end
+            (** have iterated over all orders in pending_ps *)
+            match rem_ps with
+            | nil =>
+              (** pending_ps covers the entire order ring *)
+              let head' := match adjust_order_fill_amounts_rev prev head orders with
+                           | None        => head
+                           | Some head'' => head''
+                           end
+              in head' :: adj_ps ++ rem_ps
+            | _ =>
+              (** pending_ps covers only the beginning portion of order ring *)
+              head :: adj_ps ++ rem_ps
+            end
 
-        | p :: pending_ps' =>
-          (** on the half way of iterating the pending_ps *)
-          let p' := match adjust_order_fill_amounts_rev prev p orders with
-                    | None     => p
-                    | Some p'' => p''
-                    end
-          in _adjust_orders_fill_amounts_rev_round_2
-               head p' (adj_ps ++ p' :: nil) pending_ps' rem_ps orders
-        end.
+          | p :: pending_ps' =>
+            (** on the half way of iterating the pending_ps *)
+            let p' := match adjust_order_fill_amounts_rev prev p orders with
+                      | None     => p
+                      | Some p'' => p''
+                      end
+            in _adjust_orders_fill_amounts_rev_round_2
+                 head p' (adj_ps ++ p' :: nil) pending_ps' rem_ps orders
+          end.
 
-      Definition adjust_orders_fill_amounts_rev_round_2
-                 (readj_ps adj_ps: list Participation)
-                 (orders: list OrderRuntimeState)
-        : list Participation :=
-        match readj_ps with
-        | nil => adj_ps
-        | p :: readj_ps' =>
-          match readj_ps' with
-          | nil => nil (* invalid case *)
-          | _   => _adjust_orders_fill_amounts_rev_round_2 p p nil readj_ps' adj_ps orders
-          end
-        end.
+        Definition adjust_orders_fill_amounts_rev_round_2
+                   (readj_ps adj_ps: list Participation)
+                   (orders: list OrderRuntimeState)
+          : list Participation :=
+          match readj_ps with
+          | nil => adj_ps
+          | p :: readj_ps' =>
+            match readj_ps' with
+            | nil => nil (* invalid case *)
+            | _   => _adjust_orders_fill_amounts_rev_round_2 p p nil readj_ps' adj_ps orders
+            end
+          end.
 
-      Definition adjust_orders_fill_amounts
-                 (ps: list Participation)
-                 (orders: list OrderRuntimeState)
-        : list Participation :=
-        match adjust_orders_fill_amounts_rev_round_1 (rev ps) orders with
-        | (readj_ps, adj_ps) =>
-          rev (adjust_orders_fill_amounts_rev_round_2 readj_ps adj_ps orders)
-        end.
+        Definition adjust_orders_fill_amounts
+                   (ps: list Participation)
+                   (orders: list OrderRuntimeState)
+          : list Participation :=
+          match adjust_orders_fill_amounts_rev_round_1 (rev ps) orders with
+          | (readj_ps, adj_ps) =>
+            rev (adjust_orders_fill_amounts_rev_round_2 readj_ps adj_ps orders)
+          end.
+
+      End AdjustFillAmounts.
 
       Fixpoint _reserve_orders_fillAmountS
                (ps: list Participation)
