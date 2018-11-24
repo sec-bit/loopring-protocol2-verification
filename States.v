@@ -1,5 +1,6 @@
 Require Import
-        List.
+        List
+        ZArith.
 Require Import
         Maps
         Types.
@@ -277,6 +278,75 @@ Record BurnManagerState : Type :=
   }.
 
 
+(** State of order book *)
+Module OrderElem <: ElemType.
+
+  Definition elt: Type := Order.
+  Definition elt_zero: elt :=
+    {|
+      order_version               := 0;
+      order_owner                 := 0;
+      order_tokenS                := 0;
+      order_tokenB                := 0;
+      order_amountS               := 0;
+      order_amountB               := 0;
+      order_validSince            := 0;
+      order_tokenSpendableS       := mk_spendable false 0 0;
+      order_tokenSpendableFee     := mk_spendable false 0 0;
+      order_dualAuthAddr          := 0;
+      order_broker                := 0;
+      order_brokerSpendableS      := mk_spendable false 0 0;
+      order_brokerSpendableFee    := mk_spendable false 0 0;
+      order_orderInterceptor      := 0;
+      order_wallet                := 0;
+      order_validUntil            := 0;
+      order_sig                   := nil;
+      order_dualAuthSig           := nil;
+      order_allOrNone             := false;
+      order_feeToken              := 0;
+      order_feeAmount             := 0;
+      order_feePercentage         := 0;
+      order_waiveFeePercentage    := 0%Z;
+      order_tokenSFeePercentage   := 0;
+      order_tokenBFeePercentage   := 0;
+      order_tokenRecipient        := 0;
+      order_walletSplitPercentage := 0;
+    |}.
+  Definition elt_eq := fun (x x': elt) => x = x'.
+
+  Lemma elt_eq_dec:
+    forall (x y: elt), { x = y } + { ~ x = y }.
+  Proof. repeat decide equality. Qed.
+
+  Lemma elt_eq_refl:
+    forall x, elt_eq x x.
+  Proof.
+    unfold elt_eq; auto.
+  Qed.
+
+  Lemma elt_eq_symm:
+    forall x y, elt_eq x y -> elt_eq y x.
+  Proof.
+    unfold elt_eq; auto.
+  Qed.
+
+  Lemma elt_eq_trans:
+    forall x y, elt_eq x y -> forall z, elt_eq y z -> elt_eq x z.
+  Proof.
+    unfold elt_eq; intros; congruence.
+  Qed.
+
+End OrderElem.
+
+Module H2O := Mapping (Hash_as_DT) OrderElem.
+
+Record OrderBookState : Type :=
+  {
+    (* model both orderSubmitted and orders by a single map *)
+    ob_orders         : H2O.t;
+  }.
+
+
 (** World state modeling all parties of Loopring protocol *)
 Record WorldState : Type :=
   mk_world_state {
@@ -304,9 +374,12 @@ Record WorldState : Type :=
       (* LPSC burn rate table contract *)
       wst_burn_rate_table_state: BurnRateTableState;
       wst_burn_rate_table_addr: address;
-      (* LSC burn manager contract *)
+      (* LPSC burn manager contract *)
       wst_burn_manager_state: BurnManagerState;
       wst_burn_manager_addr: address;
+      (* LPSC order book contract *)
+      wst_order_book_state: OrderBookState;
+      wst_order_book_addr: address;
 
       (* state of the current block *)
       wst_block_state: BlockState;
@@ -335,6 +408,8 @@ Definition wst_update_trade_delegate
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -359,6 +434,8 @@ Definition wst_update_feeholder
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -384,6 +461,8 @@ Definition wst_update_erc20s
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -408,6 +487,8 @@ Definition wst_update_broker_registry
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -432,6 +513,8 @@ Definition wst_update_order_registry
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -456,6 +539,8 @@ Definition wst_update_ring_submitter
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -480,6 +565,8 @@ Definition wst_update_burn_rate_table
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := wst_burn_manager_state wst;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.
 
@@ -504,5 +591,33 @@ Definition wst_update_burn_manager
     wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
     wst_burn_manager_state := st;
     wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := wst_order_book_state wst;
+    wst_order_book_addr := wst_order_book_addr wst;
+    wst_block_state := wst_block_state wst;
+  |}.
+
+Definition wst_update_order_book
+           (wst: WorldState) (st: OrderBookState)
+  : WorldState :=
+  {|
+    wst_erc20s := wst_erc20s wst;
+    wst_ring_submitter_state := wst_ring_submitter_state wst;
+    wst_ring_submitter_addr := wst_ring_submitter_addr wst;
+    wst_ring_canceller_state := wst_ring_canceller_state wst;
+    wst_ring_canceller_addr := wst_ring_canceller_addr wst;
+    wst_trade_delegate_state := wst_trade_delegate_state wst;
+    wst_trade_delegate_addr := wst_trade_delegate_addr wst;
+    wst_feeholder_state := wst_feeholder_state wst;
+    wst_feeholder_addr := wst_feeholder_addr wst;
+    wst_broker_registry_state := wst_broker_registry_state wst;
+    wst_broker_registry_addr := wst_broker_registry_addr wst;
+    wst_order_registry_state := wst_order_registry_state wst;
+    wst_order_registry_addr := wst_order_registry_addr wst;
+    wst_burn_rate_table_state := wst_burn_rate_table_state wst;
+    wst_burn_rate_table_addr := wst_burn_rate_table_addr wst;
+    wst_burn_manager_state := wst_burn_manager_state wst;
+    wst_burn_manager_addr := wst_burn_manager_addr wst;
+    wst_order_book_state := st;
+    wst_order_book_addr := wst_order_book_addr wst;
     wst_block_state := wst_block_state wst;
   |}.

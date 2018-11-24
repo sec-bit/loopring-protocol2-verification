@@ -29,9 +29,10 @@ Inductive Event : Type :=
 (* OrderRegistry events *)
 | EvtOrderRegistered (owner: address) (hash: bytes32)
 (* BurnRateTable events *)
-| EvtTokenTierUpgraded (token: address) (TIER: uint) 
-(* TODO Loopring protocol events *)
+| EvtTokenTierUpgraded (token: address) (TIER: uint)
 | EvtOwnershipTransferred (owner dest: address)
+(* OrderBook events *)
+| EvtOrderSubmitted (owner: address) (hash: bytes32)
 (* to be defined *)
 .
 
@@ -51,6 +52,8 @@ Inductive RetVal : Type :=
 | RetUint (val: uint)
 | RetBool (val: bool)
 | RetAddr (val: address)
+| RetBytes32 (val: bytes32)
+| RetOrder (order: Order)
 | RetFills (val: list (option uint))
 | RetBrokerInterceptor (interceptor: option address) (* None: not registered
                                                         Some _: registered *)

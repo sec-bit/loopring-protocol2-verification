@@ -1087,39 +1087,10 @@ Module RingSubmitter.
 
   End SetSpendable.
 
-  Parameters get_order_hash: Order -> bytes32.
   Parameters get_ring_hash: Ring -> list OrderRuntimeState -> bytes32.
   Parameter get_mining_hash: Mining -> list RingRuntimeState -> bytes32.
 
   Section HashAxioms.
-
-    Definition get_order_hash_preimg (order: Order) :=
-      (order_allOrNone order,
-       order_tokenBFeePercentage order,
-       order_tokenSFeePercentage order,
-       order_feePercentage order,
-       order_walletSplitPercentage order,
-       order_feeToken order,
-       order_tokenRecipient order,
-       order_wallet order,
-       order_orderInterceptor order,
-       order_broker order,
-       order_dualAuthAddr order,
-       order_tokenB order,
-       order_tokenS order,
-       order_owner order,
-       order_validUntil order,
-       order_validSince order,
-       order_feeAmount order,
-       order_amountB order,
-       order_amountS order).
-
-    Axiom order_hash_dec:
-      forall (ord ord': Order),
-        let preimg := get_order_hash_preimg ord in
-        let preimg' := get_order_hash_preimg ord' in
-        (preimg = preimg' -> get_order_hash ord = get_order_hash ord') /\
-        (preimg <> preimg' -> get_order_hash ord <> get_order_hash ord').
 
     Fixpoint __get_ring_hash_preimg
              (indices: list nat) (orders: list OrderRuntimeState)

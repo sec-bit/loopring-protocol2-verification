@@ -6,6 +6,7 @@ BrokerInterceptor.v
 BrokerRegistry.v
 ERC20.v
 FeeHolder.v
+OrderBook.v
 OrderRegistry.v
 RingCanceller.v
 RingSubmitter.v

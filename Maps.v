@@ -153,13 +153,15 @@ Module A2V := Mapping Address_as_DT ValElem.
 Module A2B := Mapping Address_as_DT BoolElem.
 (* (Address, Address) -> Nat *)
 Module AA2V := Mapping AA_as_DT ValElem.
-(* bytes20 -> Nat *)
+(* Hash -> Nat *)
 Module H2V := Mapping Hash_as_DT ValElem.
-(* address -> bytes20 -> bool *)
+(* Hash -> Bool *)
+Module H2B := Mapping Hash_as_DT BoolElem.
+(* address -> Hash -> bool *)
 Module AH2B := Mapping AH_as_DT BoolElem.
-(* address -> bytes20 -> Nat *)
+(* address -> Hash -> Nat *)
 Module AH2V := Mapping AH_as_DT ValElem.
-(* address -> address -> bytes20 -> Nat *)
+(* address -> address -> Hash -> Nat *)
 Module AAH2V := Mapping AAH_as_DT ValElem.
 
 

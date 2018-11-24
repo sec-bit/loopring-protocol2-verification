@@ -165,6 +165,16 @@ Section BrokerInterceptor.
 End BrokerInterceptor.
 
 
+Section OrderBook.
+
+  Inductive OrderBookMsg : Type :=
+  | msg_submitOrder (sender: address) (order: Order)
+  | msg_getOrderData (sender: address) (hash: bytes32)
+  .
+
+End OrderBook.
+
+
 Inductive Message : Type :=
 | MsgRingSubmitter (msg: RingSubmitterMsg)
 | MsgRingCanceller (msg: RingCancellerMsg)
@@ -176,5 +186,6 @@ Inductive Message : Type :=
 | MsgBurnRateTable (msg: BurnRateTableMsg)
 | MsgBrokerInterceptor (msg: BrokerInterceptorMsg)
 | MsgBurnManager (msg: BurnManagerMsg)
+| MsgOrderBook (msg: OrderBookMsg)
 (* TODO: add messages of other LPSC contracts *)
 .
