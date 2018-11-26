@@ -1337,25 +1337,23 @@ Module RingSubmitter.
           subspec_require :=
             fun wst st =>
               forall fills wst' events,
-                batchGetFilledAndCheckCancelled_success wst st fills wst' events ->
+                batchGetFilledAndCheckCancelled_success wst st fills wst' events /\
                 length fills = length (submitter_rt_orders st)
           ;
 
           subspec_trans :=
             fun wst st wst' st' =>
-              forall fills wst'' events,
-                batchGetFilledAndCheckCancelled_success wst st fills wst'' events ->
-                wst' = wst'' /\
+              forall fills events,
+                batchGetFilledAndCheckCancelled_success wst st fills wst' events /\
                 forall orders',
-                  update_orders_filled_and_valid (submitter_rt_orders st) fills orders' ->
+                  update_orders_filled_and_valid (submitter_rt_orders st) fills orders' /\
                   st' = submitter_update_orders st orders'
           ;
 
           subspec_events :=
             fun wst st events =>
-              forall fills wst' events',
-                batchGetFilledAndCheckCancelled_success wst st fills wst' events' ->
-                events = events'
+              forall fills wst',
+                batchGetFilledAndCheckCancelled_success wst st fills wst' events
           ;
         |}.
 
@@ -2288,18 +2286,16 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
-              forall wst'' st'' events,
+              forall events,
                 _rings_check_and_calc_fills_fees
-                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
-                wst' = wst'' /\ st' = st''
+                  wst st nil (submitter_rt_rings st) wst' st' events
           ;
 
           subspec_events :=
             fun wst st events =>
-              forall wst'' st'' events',
+              forall wst'' st'',
                 _rings_check_and_calc_fills_fees
-                  wst st nil (submitter_rt_rings st) wst'' st'' events ->
-                events = events'
+                  wst st nil (submitter_rt_rings st) wst'' st'' events
           ;
         |}.
 
@@ -2791,24 +2787,22 @@ Module RingSubmitter.
         {|
           subspec_require :=
             fun wst st =>
-              exists fee_payments token_payments,
-                make_payments wst st = Some (fee_payments, token_payments) /\
+              exists fee_payments token_payments events,
+                make_payments wst st = (fee_payments, token_payments, events) /\
                 calc_and_make_payments_require fee_payments token_payments
           ;
 
           subspec_trans :=
             fun wst st wst' st' =>
               st' = st /\
-              forall wst'' events,
-                calc_and_make_payments wst st wst'' events ->
-                wst' = wst''
+              forall events,
+                calc_and_make_payments wst st wst' events
           ;
 
           subspec_events :=
             fun wst st events =>
-              forall wst' events',
-                calc_and_make_payments wst st wst' events' ->
-                events = events'
+              forall wst',
+                calc_and_make_payments wst st wst' events
           ;
         |}.
 
@@ -2826,7 +2820,7 @@ Module RingSubmitter.
             fun wst st =>
               subspec_require spec wst st /\
               forall wst' st',
-                subspec_trans spec wst st wst' st' ->
+                subspec_trans spec wst st wst' st' /\
                 subspec_require spec' wst' st';
 
           subspec_trans :=
@@ -2838,9 +2832,9 @@ Module RingSubmitter.
           subspec_events :=
             fun wst st events =>
               forall wst' st' events' events'',
-                subspec_trans spec wst st wst' st' ->
-                subspec_events spec wst st events' ->
-                subspec_events spec' wst' st' events'' ->
+                subspec_trans spec wst st wst' st' /\
+                subspec_events spec wst st events' /\
+                subspec_events spec' wst' st' events'' /\
                 events = events' ++ events'';
         |}.
     Notation "s ;; s'" := (submit_rings_subspec_seq s s') (left associativity, at level 400).
@@ -2858,9 +2852,8 @@ Module RingSubmitter.
         fspec_trans :=
           fun wst wst' retval =>
             retval = RetNone /\
-            forall wst'' st'',
-              subspec_trans spec wst st wst'' st'' ->
-              wst' = wst'';
+            forall st'',
+              subspec_trans spec wst st wst' st'';
 
         fspec_events :=
           fun wst events =>
