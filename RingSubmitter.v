@@ -1193,7 +1193,7 @@ Module RingSubmitter.
 
     End UpdateOrdersHashes.
 
-    Section UpdateOrdersBrokersAndIntercetors.
+    Section UpdateOrdersBrokersAndInterceptors.
 
       Definition get_broker_success
                  (wst: WorldState) (ord: OrderRuntimeState)
@@ -1268,7 +1268,7 @@ Module RingSubmitter.
           ;
         |}.
 
-    End UpdateOrdersBrokersAndIntercetors.
+    End UpdateOrdersBrokersAndInterceptors.
 
     Section GetFilledAndCheckCancelled.
 
