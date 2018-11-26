@@ -1150,6 +1150,16 @@ Module RingSubmitter.
 
   End SubSpec.
 
+  Definition SubSpec_funcT : Type :=
+    WorldState -> RingSubmitterRuntimeState -> WorldState * RingSubmitterRuntimeState * list Event.
+
+  Definition funcT_subspec (f: SubSpec_funcT) (subspec: SubSpec) : Prop :=
+    forall wst st wst' st' events,
+      subspec_require subspec wst st ->
+      f wst st = (wst', st', events) ->
+      subspec_trans subspec wst st wst' st' /\
+      subspec_events subspec wst st events.
+
   Section SubmitRings.
 
     Section UpdateOrdersHashes.
@@ -1192,6 +1202,13 @@ Module RingSubmitter.
         |}.
 
     End UpdateOrdersHashes.
+
+    Parameter update_orders_hashes_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom update_orders_hashes_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (update_orders_hashes_func sender orders rings mining)
+                      (update_orders_hashes_subspec sender orders rings mining).
 
     Section UpdateOrdersBrokersAndInterceptors.
 
@@ -1241,7 +1258,7 @@ Module RingSubmitter.
               wst (order :: orders) wst'' (order' :: orders') (events ++ events')
       .
 
-      Definition update_orders_brokers_and_interceptors
+      Definition update_orders_brokers_and_interceptors_subspec
                  (sender: address)
                  (orders: list Order)
                  (rings: list Ring)
@@ -1269,6 +1286,13 @@ Module RingSubmitter.
         |}.
 
     End UpdateOrdersBrokersAndInterceptors.
+
+    Parameter update_orders_brokers_and_interceptors_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom update_orders_brokers_and_interceptors_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (update_orders_brokers_and_interceptors_func sender orders rings mining)
+                      (update_orders_brokers_and_interceptors_subspec sender orders rings mining).
 
     Section GetFilledAndCheckCancelled.
 
@@ -1359,6 +1383,13 @@ Module RingSubmitter.
 
     End GetFilledAndCheckCancelled.
 
+    Parameter get_filled_and_check_cancelled_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom get_filled_and_check_cancelled_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (get_filled_and_check_cancelled_func sender orders rings mining)
+                      (get_filled_and_check_cancelled_subspec sender orders rings mining).
+
     Section CheckOrders.
 
       Definition is_order_valid (ord: OrderRuntimeState) (now: uint) : bool :=
@@ -1429,6 +1460,13 @@ Module RingSubmitter.
 
     End CheckOrders.
 
+    Parameter check_orders_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom check_orders_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (check_orders_func sender orders rings mining)
+                      (check_orders_subspec sender orders rings mining).
+
     Section UpdateRingsHashes.
 
       Fixpoint update_rings_hash
@@ -1464,6 +1502,13 @@ Module RingSubmitter.
 
     End UpdateRingsHashes.
 
+    Parameter update_rings_hash_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom update_rings_hash_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (update_rings_hash_func sender orders rings mining)
+                      (update_rings_hash_subspec sender orders rings mining).
+
     Section UpdateMiningHash.
 
       Definition update_mining_hash
@@ -1494,16 +1539,23 @@ Module RingSubmitter.
 
     End UpdateMiningHash.
 
+    Parameter update_mining_hash_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom update_mining_hash_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (update_mining_hash_func sender orders rings mining)
+                      (update_mining_hash_subspec sender orders rings mining).
+
     Section UpdateMinerAndInterceptor.
 
-    Definition update_miner_interceptor (st: RingSubmitterRuntimeState) :=
-      let mining := submitter_rt_mining st in
-      let static_mining := mining_rt_static mining in
-      match mining_miner static_mining with
-      | O => submitter_update_mining
-              st (upd_mining_miner mining (mining_feeRecipient static_mining))
-      | _ => st
-      end.
+      Definition update_miner_interceptor (st: RingSubmitterRuntimeState) :=
+        let mining := submitter_rt_mining st in
+        let static_mining := mining_rt_static mining in
+        match mining_miner static_mining with
+        | O => submitter_update_mining
+                st (upd_mining_miner mining (mining_feeRecipient static_mining))
+        | _ => st
+        end.
 
       Definition update_miner_interceptor_subspec
                  (sender: address)
@@ -1524,6 +1576,13 @@ Module RingSubmitter.
         |}.
 
     End UpdateMinerAndInterceptor.
+
+    Parameter update_miner_interceptor_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom update_miner_interceptor_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (update_miner_interceptor_func sender orders rings mining)
+                      (update_miner_interceptor_subspec sender orders rings mining).
 
     Parameter verify_signature: address -> bytes32 -> bytes -> bool.
 
@@ -1557,6 +1616,13 @@ Module RingSubmitter.
         |}.
 
     End CheckMinerSignature.
+
+    Parameter check_miner_signature_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom check_miner_signature_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (check_miner_signature_func sender orders rings mining)
+                      (check_miner_signature_subspec sender orders rings mining).
 
     Section CheckOrdersDualSig.
 
@@ -1600,6 +1666,13 @@ Module RingSubmitter.
         |}.
 
     End CheckOrdersDualSig.
+
+    Parameter check_orders_dual_sig_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom check_orders_dual_sig_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (check_orders_dual_sig_func sender orders rings mining)
+                      (check_orders_dual_sig_subspec sender orders rings mining).
 
     Section CalculateFillsAndFees.
 
@@ -2284,6 +2357,13 @@ Module RingSubmitter.
 
     End CalculateFillsAndFees.
 
+    Parameter calc_fills_and_fees_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom calc_fills_and_fees_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (calc_fills_and_fees_func sender orders rings mining)
+                      (calc_fills_and_fees_subspec sender orders rings mining).
+
     Section ValidateAllOrNone.
 
       Fixpoint validate_AllOrNone (orders: list OrderRuntimeState)
@@ -2323,6 +2403,13 @@ Module RingSubmitter.
         |}.
 
     End ValidateAllOrNone.
+
+    Parameter validate_AllOrNone_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom validate_AllOrNone_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (validate_AllOrNone_func sender orders rings mining)
+                      (validate_AllOrNone_subspec sender orders rings mining).
 
     Section CalculatePayments.
 
@@ -2791,77 +2878,69 @@ Module RingSubmitter.
 
     End MakePayments.
 
-    Definition SubmitRingsSubSpec :=
-      address -> list Order -> list Ring -> Mining -> SubSpec.
+    Parameter calc_and_make_payments_func:
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Axiom calc_and_make_payments_func_subspec:
+      forall sender orders rings mining,
+        funcT_subspec (calc_and_make_payments_func sender orders rings mining)
+                      (calc_and_make_payments_subspec sender orders rings mining).
 
-    Definition submit_rings_subspec_seq (_spec _spec': SubmitRingsSubSpec) : SubmitRingsSubSpec :=
-      fun sender orders rings mining =>
-        let spec := _spec sender orders rings mining in
-        let spec' := _spec' sender orders rings mining in
-        {|
-          subspec_require :=
-            fun wst st =>
-              subspec_require spec wst st /\
-              forall wst' st',
-                subspec_trans spec wst st wst' st' /\
-                subspec_require spec' wst' st';
+    Definition SubmitRingsSubSpecFunc :=
+      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
 
-          subspec_trans :=
-            fun wst st wst' st' =>
-              forall wst'' st'',
-                subspec_trans spec wst st wst'' st'' /\
-                subspec_trans spec' wst'' st'' wst' st';
+    Definition submit_rings_subspec_func_seq
+               (f f': SubmitRingsSubSpecFunc) : SubmitRingsSubSpecFunc :=
+      fun sender orders rings mining wst st =>
+        match f sender orders rings mining wst st with
+        | (wst', st', events) =>
+          match f' sender orders rings mining wst' st' with
+          | (wst'', st'', events') => (wst'', st'', events ++ events')
+          end
+        end.
 
-          subspec_events :=
-            fun wst st events =>
-              forall wst' st',
-                subspec_trans spec wst st wst' st' /\
-                forall events',
-                  subspec_events spec wst st events' /\
-                  forall st' events'',
-                    subspec_events spec' wst' st' events'' /\
-                    events = events' ++ events'';
-        |}.
-    Notation "s ;; s'" := (submit_rings_subspec_seq s s') (left associativity, at level 400).
+    Notation "s ;; s'" := (submit_rings_subspec_func_seq s s') (left associativity, at level 400).
 
-    Definition submit_rings_subspec_to_fspec
-               (subspec: SubmitRingsSubSpec)
+    Definition submit_rings_subspec_func_to_fspec
+               (_f: SubmitRingsSubSpecFunc)
                (sender: address) (orders: list Order) (rings: list Ring) (mining: Mining)
       : FSpec :=
-      let spec := subspec sender orders rings mining in
+      let f := _f sender orders rings mining in
       let st := make_rt_submitter_state mining orders rings in
       {|
         fspec_require :=
-          fun wst => subspec_require spec wst st;
+          fun wst => True;
 
         fspec_trans :=
-          fun wst wst' retval =>
-            retval = RetNone /\
-            forall st'',
-              subspec_trans spec wst st wst' st'';
+            fun wst wst' retval =>
+              retval = RetNone /\
+              match f wst st with
+              | (wst'', _, _) => wst' = wst''
+              end;
 
         fspec_events :=
           fun wst events =>
-              subspec_events spec wst st events;
+            match f wst st with
+            | (_, _, events') => events = events'
+            end;
       |}.
 
     Definition submitRings_spec
                (sender: address)
                (orders: list Order) (rings: list Ring) (mining: Mining) :=
-      submit_rings_subspec_to_fspec
+      submit_rings_subspec_func_to_fspec
         (
-           update_orders_hashes_subspec ;;
-           update_orders_brokers_and_interceptors ;;
-           get_filled_and_check_cancelled_subspec ;;
-           check_orders_subspec ;;
-           update_rings_hash_subspec ;;
-           update_mining_hash_subspec ;;
-           update_miner_interceptor_subspec ;;
-           check_miner_signature_subspec ;;
-           check_orders_dual_sig_subspec ;;
-           calc_fills_and_fees_subspec ;;
-           validate_AllOrNone_subspec ;;
-           calc_and_make_payments_subspec
+           update_orders_hashes_func ;;
+           update_orders_brokers_and_interceptors_func ;;
+           get_filled_and_check_cancelled_func ;;
+           check_orders_func ;;
+           update_rings_hash_func ;;
+           update_mining_hash_func ;;
+           update_miner_interceptor_func ;;
+           check_miner_signature_func ;;
+           check_orders_dual_sig_func ;;
+           calc_fills_and_fees_func ;;
+           validate_AllOrNone_func ;;
+           calc_and_make_payments_func
         )
         sender orders rings mining.
 
