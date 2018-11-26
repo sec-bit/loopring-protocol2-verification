@@ -1929,252 +1929,256 @@ Module RingSubmitter.
 
       End ReserveSpendables.
 
-      Definition fee_paid_in_tokenB
-                 (p: Participation) (orders: list OrderRuntimeState) : bool :=
-        match nth_error orders (part_order_idx p) with
-        | None => false (* invalid case *)
-        | Some ord =>
+      Section CalcFillsFees.
+
+        Definition fee_paid_in_tokenB
+                   (p: Participation) (orders: list OrderRuntimeState) : bool :=
+          match nth_error orders (part_order_idx p) with
+          | None => false (* invalid case *)
+          | Some ord =>
+            let order := ord_rt_order ord in
+            Nat.leb (order_feeAmount order * part_fillAmountS p / order_amountS order)
+                    (part_fillAmountB p) &&
+                    Nat.eqb (order_feeToken order)
+                    (order_tokenB order) &&
+                    Nat.eqb (order_owner order)
+                    (order_tokenRecipient order)
+          end.
+
+        Parameter order_get_spendableFee:
+          TokenSpendableMap.t -> BrokerSpendableMap.t -> OrderRuntimeState -> uint.
+
+        Definition insufficient_spendable
+                   (token_spendables: TokenSpendableMap.t)
+                   (broker_spendables: BrokerSpendableMap.t)
+                   (p: Participation)
+                   (ord: OrderRuntimeState)
+          : bool :=
           let order := ord_rt_order ord in
-          Nat.leb (order_feeAmount order * part_fillAmountS p / order_amountS order)
-                  (part_fillAmountB p) &&
-          Nat.eqb (order_feeToken order)
-                  (order_tokenB order) &&
-          Nat.eqb (order_owner order)
-                  (order_tokenRecipient order)
-        end.
+          Nat.ltb (order_get_spendableFee token_spendables broker_spendables ord)
+                  (order_feeAmount order * part_fillAmountS p / order_amountS order).
 
-      Parameter order_get_spendableFee:
-        TokenSpendableMap.t -> BrokerSpendableMap.t -> OrderRuntimeState -> uint.
+        Definition reserve_order_fee
+                   (token_spendables: TokenSpendableMap.t)
+                   (broker_spendables: BrokerSpendableMap.t)
+                   (ord: OrderRuntimeState)
+                   (amount: uint)
+          : TokenSpendableMap.t * BrokerSpendableMap.t :=
+          let order := ord_rt_order ord in
+          let broker := order_broker order in
+          let owner := order_owner order in
+          let token := order_feeToken order in
+          let token_spendables' := token_spendableFee_reserved_inc token_spendables ord amount in
+          let broker_spendables' :=
+              match ord_rt_brokerInterceptor ord with
+              | O => broker_spendables
+              | _ => broker_spendableFee_reserved_inc broker_spendables ord amount
+              end
+          in (token_spendables', broker_spendables').
 
-      Definition insufficient_spendable
-                 (token_spendables: TokenSpendableMap.t)
-                 (broker_spendables: BrokerSpendableMap.t)
-                 (p: Participation)
-                 (ord: OrderRuntimeState)
-        : bool :=
-        let order := ord_rt_order ord in
-        Nat.ltb (order_get_spendableFee token_spendables broker_spendables ord)
-                (order_feeAmount order * part_fillAmountS p / order_amountS order).
-
-      Definition reserve_order_fee
-                 (token_spendables: TokenSpendableMap.t)
-                 (broker_spendables: BrokerSpendableMap.t)
-                 (ord: OrderRuntimeState)
-                 (amount: uint)
-        : TokenSpendableMap.t * BrokerSpendableMap.t :=
-        let order := ord_rt_order ord in
-        let broker := order_broker order in
-        let owner := order_owner order in
-        let token := order_feeToken order in
-        let token_spendables' := token_spendableFee_reserved_inc token_spendables ord amount in
-        let broker_spendables' :=
-            match ord_rt_brokerInterceptor ord with
-            | O => broker_spendables
-            | _ => broker_spendableFee_reserved_inc broker_spendables ord amount
-            end
-        in (token_spendables', broker_spendables').
-
-      (** Update feeAmount, feeAmountS, feeAmountB and splitS of `p`
+        (** Update feeAmount, feeAmountS, feeAmountB and splitS of `p`
           according to fillAmountB of `pp`. *)
-      Definition calculate_fees
-                 (pp p: Participation)
-                 (orders: list OrderRuntimeState)
-                 (token_spendables: TokenSpendableMap.t)
-                 (broker_spendables: BrokerSpendableMap.t)
-        : option (Participation *
-                  TokenSpendableMap.t *
-                  BrokerSpendableMap.t) :=
-        match nth_error orders (part_order_idx p) with
-        | None => None (* invalid case *)
-        | Some ord =>
-          let order := ord_rt_order ord in
-          let p_fillAmountS := part_fillAmountS p in
-          let p_fillAmountB := part_fillAmountB p in
-          let pp_fillAmountB := part_fillAmountB pp in
-          match ord_rt_p2p ord with
-          | true =>
-            (** P2P *)
-            let p_feeAmountS := p_fillAmountS * order_tokenSFeePercentage order / FEE_PERCENTAGE_BASE_N in
-            let p_feeAmountB := p_fillAmountB * order_tokenBFeePercentage order / FEE_PERCENTAGE_BASE_N in
-            if Nat.ltb (p_fillAmountS - p_feeAmountS) pp_fillAmountB then
-              (** p does not have sufficient token to sell *)
-              None
-            else
-              (** otherwise ... *)
-              let p_splitS := p_fillAmountS - p_feeAmountS - pp_fillAmountB in
-              Some (upd_part_fillAmountS
-                      (upd_part_splitS
-                         (upd_part_feeAmounts p 0 p_feeAmountS p_feeAmountB)
-                         p_splitS)
-                      (pp_fillAmountB + p_feeAmountS),
-                    token_spendables,
-                    broker_spendables)
-
-          | false =>
-            (** non-P2P *)
-            if fee_paid_in_tokenB p orders then
-              (** feeToken is tokenB ... *)
-              if Nat.ltb p_fillAmountS pp_fillAmountB then
+        Definition calculate_fees
+                   (pp p: Participation)
+                   (orders: list OrderRuntimeState)
+                   (token_spendables: TokenSpendableMap.t)
+                   (broker_spendables: BrokerSpendableMap.t)
+          : option (Participation *
+                    TokenSpendableMap.t *
+                    BrokerSpendableMap.t) :=
+          match nth_error orders (part_order_idx p) with
+          | None => None (* invalid case *)
+          | Some ord =>
+            let order := ord_rt_order ord in
+            let p_fillAmountS := part_fillAmountS p in
+            let p_fillAmountB := part_fillAmountB p in
+            let pp_fillAmountB := part_fillAmountB pp in
+            match ord_rt_p2p ord with
+            | true =>
+              (** P2P *)
+              let p_feeAmountS := p_fillAmountS * order_tokenSFeePercentage order / FEE_PERCENTAGE_BASE_N in
+              let p_feeAmountB := p_fillAmountB * order_tokenBFeePercentage order / FEE_PERCENTAGE_BASE_N in
+              if Nat.ltb (p_fillAmountS - p_feeAmountS) pp_fillAmountB then
                 (** p does not have sufficient token to sell *)
                 None
               else
                 (** otherwise ... *)
-                let p_feeAmountB := order_feeAmount order * p_fillAmountS / (order_amountS order) in
-                let p_splitS := p_fillAmountS - pp_fillAmountB in
-                Some (upd_part_splitS
-                        (upd_part_feeAmounts p 0 0 p_feeAmountB)
-                        p_splitS,
+                let p_splitS := p_fillAmountS - p_feeAmountS - pp_fillAmountB in
+                Some (upd_part_fillAmountS
+                        (upd_part_splitS
+                           (upd_part_feeAmounts p 0 p_feeAmountS p_feeAmountB)
+                           p_splitS)
+                        (pp_fillAmountB + p_feeAmountS),
                       token_spendables,
                       broker_spendables)
-            else
-              (** otherwise ... *)
-              if insufficient_spendable token_spendables broker_spendables p ord then
-                (** p does not sufficient feeToken *)
+
+            | false =>
+              (** non-P2P *)
+              if fee_paid_in_tokenB p orders then
+                (** feeToken is tokenB ... *)
                 if Nat.ltb p_fillAmountS pp_fillAmountB then
-                  (** p dose not have sufficient token to sell *)
-                  None
-                else
-                  (** p can pay fee by tokenB *)
-                  let p_feeAmountB := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
-                  let p_splitS := p_fillAmountS - pp_fillAmountB in
-                  Some (upd_part_fillAmountS
-                          (upd_part_splitS
-                             (upd_part_feeAmounts p 0 0 p_feeAmountB)
-                             p_splitS)
-                          pp_fillAmountB,
-                        token_spendables,
-                        broker_spendables)
-              else
-                (** p has sufficient feeToken *)
-                if Nat.ltb p_fillAmountS p_fillAmountB then
                   (** p does not have sufficient token to sell *)
                   None
                 else
                   (** otherwise ... *)
-                  let p_feeAmount := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
+                  let p_feeAmountB := order_feeAmount order * p_fillAmountS / (order_amountS order) in
                   let p_splitS := p_fillAmountS - pp_fillAmountB in
-                  match reserve_order_fee token_spendables broker_spendables ord p_feeAmount with
-                  | (token_spendables', broker_spendables') =>
+                  Some (upd_part_splitS
+                          (upd_part_feeAmounts p 0 0 p_feeAmountB)
+                          p_splitS,
+                        token_spendables,
+                        broker_spendables)
+              else
+                (** otherwise ... *)
+                if insufficient_spendable token_spendables broker_spendables p ord then
+                  (** p does not sufficient feeToken *)
+                  if Nat.ltb p_fillAmountS pp_fillAmountB then
+                    (** p dose not have sufficient token to sell *)
+                    None
+                  else
+                    (** p can pay fee by tokenB *)
+                    let p_feeAmountB := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
+                    let p_splitS := p_fillAmountS - pp_fillAmountB in
                     Some (upd_part_fillAmountS
                             (upd_part_splitS
-                               (upd_part_feeAmounts p p_feeAmount 0 0)
+                               (upd_part_feeAmounts p 0 0 p_feeAmountB)
                                p_splitS)
                             pp_fillAmountB,
-                          token_spendables',
-                          broker_spendables')
-                  end
-          end
-        end.
-
-      Fixpoint _calc_orders_fees_and_waive
-               (st: RingSubmitterRuntimeState)
-               (r: RingRuntimeState) (lrings rrings: list RingRuntimeState)
-               (pps ps: list Participation)
-        : option (RingSubmitterRuntimeState * RingRuntimeState) :=
-        match ps with
-        | nil => Some (st, r)
-        | p :: ps' =>
-          match get_pp pps ps with
-          | None => None (* invalid case *)
-          | Some pp =>
-            let orders := submitter_rt_orders st in
-            match calculate_fees pp p orders
-                                 (submitter_rt_token_spendables st)
-                                 (submitter_rt_broker_spendables st) with
-            | None =>
-              (** `p` cannot pay fees *)
-              let r' := upd_ring_valid r false in
-              Some (submitter_update_rings st (lrings ++ r' :: rrings), r')
-            | Some (p', token_spendables', broker_spendables') =>
-              match nth_error orders (part_order_idx p') with
-              | None => None (* invalid case *)
-              | Some ord =>
-                let waive := match order_waiveFeePercentage (ord_rt_order ord) with
-                             | Z.neg p => Z.abs_nat (Z.pos p)
-                             | _ => 0
-                             end
-                in
-                let pps' := pps ++ p' :: nil in
-                let r' := inc_ring_minerFeesToOrdersPercentage
-                            (upd_ring_participations r (pps' ++ ps')) waive in
-                let st' := submitter_update_broker_spendables
-                             (submitter_update_token_spendables
-                                (submitter_update_rings st (lrings ++ r' :: rrings))
-                                token_spendables')
-                             broker_spendables' in
-                _calc_orders_fees_and_waive st' r' lrings rrings pps' ps'
-              end
+                          token_spendables,
+                          broker_spendables)
+                else
+                  (** p has sufficient feeToken *)
+                  if Nat.ltb p_fillAmountS p_fillAmountB then
+                    (** p does not have sufficient token to sell *)
+                    None
+                  else
+                    (** otherwise ... *)
+                    let p_feeAmount := p_fillAmountB * order_feePercentage order / FEE_PERCENTAGE_BASE_N in
+                    let p_splitS := p_fillAmountS - pp_fillAmountB in
+                    match reserve_order_fee token_spendables broker_spendables ord p_feeAmount with
+                    | (token_spendables', broker_spendables') =>
+                      Some (upd_part_fillAmountS
+                              (upd_part_splitS
+                                 (upd_part_feeAmounts p p_feeAmount 0 0)
+                                 p_splitS)
+                              pp_fillAmountB,
+                            token_spendables',
+                            broker_spendables')
+                    end
             end
-          end
-        end.
+          end.
 
-      Definition calc_orders_fees_and_waive
+        Fixpoint _calc_orders_fees_and_waive
                  (st: RingSubmitterRuntimeState)
                  (r: RingRuntimeState) (lrings rrings: list RingRuntimeState)
-        : option (RingSubmitterRuntimeState * RingRuntimeState) :=
-        match _calc_orders_fees_and_waive st r lrings rrings nil (ring_rt_participations r) with
-        | None => None
-        | Some (st', r') =>
-          if Nat.ltb FEE_PERCENTAGE_BASE_N
-                     (ring_minerFeesToOrdersPercentage (ring_rt_static r')) then
-            let r'' := upd_ring_valid r' false in
-            Some (submitter_update_rings st' (lrings ++ r'' :: rrings), r'')
-          else
-            Some (st', r')
-        end.
+                 (pps ps: list Participation)
+          : option (RingSubmitterRuntimeState * RingRuntimeState) :=
+          match ps with
+          | nil => Some (st, r)
+          | p :: ps' =>
+            match get_pp pps ps with
+            | None => None (* invalid case *)
+            | Some pp =>
+              let orders := submitter_rt_orders st in
+              match calculate_fees pp p orders
+                                   (submitter_rt_token_spendables st)
+                                   (submitter_rt_broker_spendables st) with
+              | None =>
+                (** `p` cannot pay fees *)
+                let r' := upd_ring_valid r false in
+                Some (submitter_update_rings st (lrings ++ r' :: rrings), r')
+              | Some (p', token_spendables', broker_spendables') =>
+                match nth_error orders (part_order_idx p') with
+                | None => None (* invalid case *)
+                | Some ord =>
+                  let waive := match order_waiveFeePercentage (ord_rt_order ord) with
+                               | Z.neg p => Z.abs_nat (Z.pos p)
+                               | _ => 0
+                               end
+                  in
+                  let pps' := pps ++ p' :: nil in
+                  let r' := inc_ring_minerFeesToOrdersPercentage
+                              (upd_ring_participations r (pps' ++ ps')) waive in
+                  let st' := submitter_update_broker_spendables
+                               (submitter_update_token_spendables
+                                  (submitter_update_rings st (lrings ++ r' :: rrings))
+                                  token_spendables')
+                               broker_spendables' in
+                  _calc_orders_fees_and_waive st' r' lrings rrings pps' ps'
+                end
+              end
+            end
+          end.
 
-      Fixpoint clear_orders_reservations
-               (st: RingSubmitterRuntimeState) (ps: list Participation)
-        : option RingSubmitterRuntimeState :=
-        match ps with
-        | nil => Some st
-        | p :: ps' =>
-          match nth_error (submitter_rt_orders st) (part_order_idx p) with
-          | None => None (* invalid case *)
-          | Some ord => clear_orders_reservations (clear_order_spendables_reserved st ord) ps'
-          end
-        end.
+        Definition calc_orders_fees_and_waive
+                   (st: RingSubmitterRuntimeState)
+                   (r: RingRuntimeState) (lrings rrings: list RingRuntimeState)
+          : option (RingSubmitterRuntimeState * RingRuntimeState) :=
+          match _calc_orders_fees_and_waive st r lrings rrings nil (ring_rt_participations r) with
+          | None => None
+          | Some (st', r') =>
+            if Nat.ltb FEE_PERCENTAGE_BASE_N
+                       (ring_minerFeesToOrdersPercentage (ring_rt_static r')) then
+              let r'' := upd_ring_valid r' false in
+              Some (submitter_update_rings st' (lrings ++ r'' :: rrings), r'')
+            else
+              Some (st', r')
+          end.
 
-      Definition calculate_fill_amount_and_fee
-                 (wst: WorldState)
-                 (st: RingSubmitterRuntimeState)
-                 (r: RingRuntimeState)
-                 (lrings rrings: list RingRuntimeState)
-                 (wst': WorldState)
-                 (st': RingSubmitterRuntimeState)
-                 (r': RingRuntimeState)
-                 (events: list Event) : Prop :=
-        forall wst1 st1 r1 events1
-          wst2 st2 r2 events2
-          wst3 st3 r3 events3
-          wst4 st4 r4 events4
-          wst5 st5 r5 events5,
-          (* init *)
-          ring_init_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 /\
-          (* adjust fill amounts *)
-          r2 = upd_ring_participations
+        Fixpoint clear_orders_reservations
+                 (st: RingSubmitterRuntimeState) (ps: list Participation)
+          : option RingSubmitterRuntimeState :=
+          match ps with
+          | nil => Some st
+          | p :: ps' =>
+            match nth_error (submitter_rt_orders st) (part_order_idx p) with
+            | None => None (* invalid case *)
+            | Some ord => clear_orders_reservations (clear_order_spendables_reserved st ord) ps'
+            end
+          end.
+
+        Definition calculate_fill_amount_and_fee
+                   (wst: WorldState)
+                   (st: RingSubmitterRuntimeState)
+                   (r: RingRuntimeState)
+                   (lrings rrings: list RingRuntimeState)
+                   (wst': WorldState)
+                   (st': RingSubmitterRuntimeState)
+                   (r': RingRuntimeState)
+                   (events: list Event) : Prop :=
+          forall wst1 st1 r1 events1
+            wst2 st2 r2 events2
+            wst3 st3 r3 events3
+            wst4 st4 r4 events4
+            wst5 st5 r5 events5,
+            (* init *)
+            ring_init_max_fill_amounts wst st r lrings rrings wst1 st1 r1 events1 /\
+            (* adjust fill amounts *)
+            r2 = upd_ring_participations
                    r1
                    (adjust_orders_fill_amounts (ring_rt_participations r1)
                                                (submitter_rt_orders st1)) /\
-          st2 = submitter_update_rings st1 (lrings ++ r2 :: rrings) /\
-          wst2 = wst1 /\
-          events2 = nil /\
-          (* reserve fill amountS *)
-          st3 = reserve_orders_fillAmounts st2 r2 /\
-          r3 = r2 /\
-          wst3 = wst2 /\
-          events3 = nil /\
-          (* calc fees and waive *)
-          calc_orders_fees_and_waive st3 r3 lrings rrings = Some (st4, r4) /\
-          wst4 = wst3 /\
-          events4 = nil /\
-          (* clear reservations *)
-          clear_orders_reservations st4 (ring_rt_participations r4) = Some st5 /\
-          r5 = r4 /\
-          wst5 = wst4 /\
-          events5 = nil /\
-          (* final *)
-          wst' = wst5 /\ st' = st5 /\ r' = r5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+            st2 = submitter_update_rings st1 (lrings ++ r2 :: rrings) /\
+            wst2 = wst1 /\
+            events2 = nil /\
+            (* reserve fill amountS *)
+            st3 = reserve_orders_fillAmounts st2 r2 /\
+            r3 = r2 /\
+            wst3 = wst2 /\
+            events3 = nil /\
+            (* calc fees and waive *)
+            calc_orders_fees_and_waive st3 r3 lrings rrings = Some (st4, r4) /\
+            wst4 = wst3 /\
+            events4 = nil /\
+            (* clear reservations *)
+            clear_orders_reservations st4 (ring_rt_participations r4) = Some st5 /\
+            r5 = r4 /\
+            wst5 = wst4 /\
+            events5 = nil /\
+            (* final *)
+            wst' = wst5 /\ st' = st5 /\ r' = r5 /\ events = events1 ++ events2 ++ events3 ++ events4 ++ events5.
+
+      End CalcFillsFees.
 
       Definition adjust_order_state
                  (p: Participation)
