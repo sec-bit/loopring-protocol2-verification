@@ -1203,8 +1203,18 @@ Module RingSubmitter.
 
     End UpdateOrdersHashes.
 
-    Parameter update_orders_hashes_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition update_orders_hashes_func
+               (sender: address)
+               (orders: list Order)
+               (rings: list Ring)
+               (mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         submitter_update_orders
+           st (update_orders_hashes (submitter_rt_orders st)),
+         nil).
+
     Axiom update_orders_hashes_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (update_orders_hashes_func sender orders rings mining)
@@ -1271,7 +1281,7 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               forall wst'' orders' events,
                 update_orders_broker_interceptor
-                  wst (submitter_rt_orders st) wst'' orders' events ->
+                  wst (submitter_rt_orders st) wst'' orders' events /\
                 wst' = wst'' /\
                 st' = submitter_update_orders st orders'
           ;
@@ -1280,8 +1290,9 @@ Module RingSubmitter.
             fun wst st events =>
               forall wst' orders' events',
                 update_orders_broker_interceptor
-                  wst (submitter_rt_orders st) wst' orders' events' ->
-                events = events'
+                  wst (submitter_rt_orders st) wst' orders' events' /\
+                events = events' /\
+                (forall r, ~ In (EvtRingSkipped r) events)
           ;
         |}.
 
@@ -1460,8 +1471,21 @@ Module RingSubmitter.
 
     End CheckOrders.
 
-    Parameter check_orders_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition check_orders_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         let orders' := update_orders_valid
+                          (submitter_rt_orders st)
+                          (block_timestamp (wst_block_state wst)) in
+         let orders' := update_orders_p2p orders' in
+         submitter_update_orders st orders',
+         nil).
+
     Axiom check_orders_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (check_orders_func sender orders rings mining)
@@ -1502,8 +1526,20 @@ Module RingSubmitter.
 
     End UpdateRingsHashes.
 
-    Parameter update_rings_hash_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition update_rings_hash_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         submitter_update_rings
+           st
+           (update_rings_hash
+              (submitter_rt_rings st) (submitter_rt_orders st)),
+         nil).
+
     Axiom update_rings_hash_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (update_rings_hash_func sender orders rings mining)
@@ -1539,8 +1575,20 @@ Module RingSubmitter.
 
     End UpdateMiningHash.
 
-    Parameter update_mining_hash_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition update_mining_hash_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         submitter_update_mining
+           st
+           (update_mining_hash
+              (submitter_rt_mining st) (submitter_rt_rings st)),
+         nil).
+
     Axiom update_mining_hash_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (update_mining_hash_func sender orders rings mining)
@@ -1577,8 +1625,17 @@ Module RingSubmitter.
 
     End UpdateMinerAndInterceptor.
 
-    Parameter update_miner_interceptor_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition update_miner_interceptor_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         update_miner_interceptor st,
+         nil).
+
     Axiom update_miner_interceptor_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (update_miner_interceptor_func sender orders rings mining)
@@ -1617,8 +1674,14 @@ Module RingSubmitter.
 
     End CheckMinerSignature.
 
-    Parameter check_miner_signature_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition check_miner_signature_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st => (wst, st, nil).
+
     Axiom check_miner_signature_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (check_miner_signature_func sender orders rings mining)
@@ -1667,8 +1730,20 @@ Module RingSubmitter.
 
     End CheckOrdersDualSig.
 
-    Parameter check_orders_dual_sig_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition check_orders_dual_sig_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         submitter_update_orders
+           st
+           (check_orders_dual_sig (mining_rt_hash (submitter_rt_mining st))
+                                  (submitter_rt_orders st)),
+         nil).
+
     Axiom check_orders_dual_sig_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (check_orders_dual_sig_func sender orders rings mining)
@@ -2404,8 +2479,18 @@ Module RingSubmitter.
 
     End ValidateAllOrNone.
 
-    Parameter validate_AllOrNone_func:
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    Definition validate_AllOrNone_func
+               (sender: address)
+               (_orders: list Order)
+               (_rings: list Ring)
+               (_mining: Mining)
+      : SubSpec_funcT :=
+      fun wst st =>
+        (wst,
+         submitter_update_orders
+           st (validate_AllOrNone (submitter_rt_orders st)),
+         nil).
+
     Axiom validate_AllOrNone_func_subspec:
       forall sender orders rings mining,
         funcT_subspec (validate_AllOrNone_func sender orders rings mining)
