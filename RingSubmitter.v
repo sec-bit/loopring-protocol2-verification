@@ -1529,21 +1529,14 @@ Module RingSubmitter.
 
     Section CheckMinerSignature.
 
-      Inductive miner_signature_valid
-                (mining: MiningRuntimeState) (sender: address) : Prop :=
-      | MinerSigValid_nosig:
-          mining_sig (mining_rt_static mining) = nil ->
-          mining_miner (mining_rt_static mining) = sender ->
-          miner_signature_valid mining sender
-
-      | MinerSigValid_sig:
-          let sig := mining_sig (mining_rt_static mining) in
-          sig <> nil ->
-          verify_signature (mining_miner (mining_rt_static mining))
-                           (mining_rt_hash mining)
-                           sig = true ->
-          miner_signature_valid mining sender
-      .
+      Definition miner_signature_valid
+                 (mining: MiningRuntimeState) (sender: address) : bool :=
+        match mining_sig (mining_rt_static mining) with
+        | nil => Nat.eqb (mining_miner (mining_rt_static mining)) sender
+        | _ as sig => verify_signature (mining_miner (mining_rt_static mining))
+                                      (mining_rt_hash mining)
+                                      sig
+        end.
 
       Definition check_miner_signature_subspec
                  (sender: address)
@@ -1553,7 +1546,7 @@ Module RingSubmitter.
         {|
           subspec_require :=
             fun wst st =>
-              miner_signature_valid (submitter_rt_mining st) sender;
+              miner_signature_valid (submitter_rt_mining st) sender = true;
 
           subspec_trans :=
             fun wst st wst' st' =>
@@ -1567,32 +1560,23 @@ Module RingSubmitter.
 
     Section CheckOrdersDualSig.
 
-      Inductive check_orders_dual_sig (mining_hash: bytes32)
-      : list OrderRuntimeState -> list OrderRuntimeState -> Prop :=
-      | CheckOrdersDualSig_nil:
-          check_orders_dual_sig mining_hash nil nil
-
-      | CheckOrdersDualSig_cons_valid:
-          forall ord orders orders',
-            let order := ord_rt_order ord in
-            verify_signature (order_dualAuthAddr order)
-                             mining_hash
-                             (order_dualAuthSig order) = true ->
-            check_orders_dual_sig mining_hash orders orders' ->
-            check_orders_dual_sig mining_hash (ord :: orders) (ord :: orders')
-
-      | CheckOrdersDualSig_cons_invalid:
-          forall ord orders orders',
-            let order := ord_rt_order ord in
-            verify_signature (order_dualAuthAddr order)
-                             mining_hash
-                             (order_dualAuthSig order) = false ->
-            check_orders_dual_sig mining_hash orders orders' ->
-            check_orders_dual_sig
-              mining_hash
-              (ord :: orders)
-              (upd_order_valid ord false :: orders')
-      .
+      Fixpoint check_orders_dual_sig
+               (mining_hash: bytes32)
+               (orders: list OrderRuntimeState)
+      : list OrderRuntimeState :=
+        match orders with
+        | nil => orders
+        | ord :: orders' =>
+          let order := ord_rt_order ord in
+          let ord' :=
+              match verify_signature (order_dualAuthAddr order)
+                                     mining_hash
+                                     (order_dualAuthSig order) with
+              | true => ord
+              | false => upd_order_valid ord false
+              end
+          in ord' :: check_orders_dual_sig mining_hash orders'
+        end.
 
       Definition check_orders_dual_sig_subspec
                  (sender: address)
@@ -1606,11 +1590,10 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               wst' = wst /\
-              forall orders',
-                check_orders_dual_sig (mining_rt_hash (submitter_rt_mining st))
-                                      (submitter_rt_orders st)
-                                      orders' ->
-                st' = submitter_update_orders st orders';
+              st' = submitter_update_orders
+                      st
+                      (check_orders_dual_sig (mining_rt_hash (submitter_rt_mining st))
+                                             (submitter_rt_orders st));
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -2831,11 +2814,13 @@ Module RingSubmitter.
 
           subspec_events :=
             fun wst st events =>
-              forall wst' st' events' events'',
+              forall wst' st',
                 subspec_trans spec wst st wst' st' /\
-                subspec_events spec wst st events' /\
-                subspec_events spec' wst' st' events'' /\
-                events = events' ++ events'';
+                forall events',
+                  subspec_events spec wst st events' /\
+                  forall st' events'',
+                    subspec_events spec' wst' st' events'' /\
+                    events = events' ++ events'';
         |}.
     Notation "s ;; s'" := (submit_rings_subspec_seq s s') (left associativity, at level 400).
 
