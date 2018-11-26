@@ -2688,35 +2688,35 @@ Module RingSubmitter.
                (rings: list RingRuntimeState)
                (orders: list OrderRuntimeState)
                (fee_holder_addr miner_fee_recipient: address)
-        : option (list FeeBalanceParam * list TransferParam) :=
+        : list FeeBalanceParam * list TransferParam * list Event :=
         match rings with
-        | nil => Some (nil, nil)
+        | nil => (nil, nil, nil)
         | r :: rings' =>
-          match get_fees_for_ring r orders with
-          | None => None (* invalid case *)
-          | Some r' =>
-            match make_feepayments_for_ring
-                    r' orders fee_holder_addr miner_fee_recipient with
-            | None => None (* invalid case *)
-            | Some fee_payments =>
-              match make_tokenpayments_for_ring
-                      r' orders fee_holder_addr miner_fee_recipient with
-              | None => None (* invalid case *)
-              | Some token_payments =>
-                match make_payments_for_rings
-                        rings' orders fee_holder_addr miner_fee_recipient with
-                | None => None (* invalid case *)
-                | Some (fee_payments', token_payments') =>
-                  Some (fee_payments ++ fee_payments',
-                        token_payments' ++ token_payments')
+          let '(fee_payments, token_payments, events) :=
+              match get_fees_for_ring r orders with
+              | None => (nil, nil, EvtRingSkipped (ring_rt_static r) :: nil)
+              | Some r' =>
+                match (make_feepayments_for_ring
+                         r' orders fee_holder_addr miner_fee_recipient,
+                       make_tokenpayments_for_ring
+                         r' orders fee_holder_addr miner_fee_recipient) with
+                | (None, _) => (nil, nil, EvtRingSkipped (ring_rt_static r) :: nil)
+                | (_, None) => (nil, nil, EvtRingSkipped (ring_rt_static r) :: nil)
+                | (Some fps, Some tps) => (fps, tps, nil)
                 end
               end
-            end
+          in
+          match make_payments_for_rings
+                  rings' orders fee_holder_addr miner_fee_recipient with
+          | (fee_payments', token_payments', events') =>
+            (fee_payments ++ fee_payments',
+             token_payments ++ token_payments',
+             events ++ events')
           end
         end.
 
       Definition make_payments (wst: WorldState) (st: RingSubmitterRuntimeState)
-        : option (list FeeBalanceParam * list TransferParam) :=
+        : list FeeBalanceParam * list TransferParam * list Event :=
         make_payments_for_rings (submitter_rt_rings st)
                                 (submitter_rt_orders st)
                                 (wst_feeholder_addr wst)
@@ -2772,16 +2772,16 @@ Module RingSubmitter.
                  (wst: WorldState) (st: RingSubmitterRuntimeState)
                  (wst': WorldState) (events: list Event)
         : Prop :=
-        forall fee_payments token_payments
+        forall fee_payments token_payments events0
           wst1 events1 wst2 events2,
-          make_payments wst st = Some (fee_payments, token_payments) /\
+          make_payments wst st = (fee_payments, token_payments, events0) /\
           TradeDelegate.model
             wst (msg_batchTransfer (wst_ring_submitter_addr wst) token_payments)
             wst1 RetNone events1 /\
           FeeHolder.model
             wst1 (msg_batchAddFeeBalances (wst_ring_submitter_addr wst) fee_payments)
             wst2 RetNone events2 /\
-          wst' = wst2 /\ events = events1 ++ events2.
+          wst' = wst2 /\ events = events0 ++ events1 ++ events2.
 
       Definition calc_and_make_payments_subspec
                  (sender: address)

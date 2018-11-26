@@ -33,7 +33,8 @@ Inductive Event : Type :=
 | EvtOwnershipTransferred (owner dest: address)
 (* OrderBook events *)
 | EvtOrderSubmitted (owner: address) (hash: bytes32)
-(* to be defined *)
+(* Pseudo events, used only in model and proving *)
+| EvtRingSkipped (r: Ring)
 .
 
 Fixpoint has_revert_event (evts: list Event) : bool :=
