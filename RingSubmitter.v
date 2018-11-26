@@ -1377,8 +1377,7 @@ Module RingSubmitter.
                (Nat.ltb (order_tokenSFeePercentage order) FEE_PERCENTAGE_BASE_N) &&
                (Nat.ltb (order_tokenBFeePercentage order) FEE_PERCENTAGE_BASE_N) &&
                (Nat.leb (order_walletSplitPercentage order) 100) &&
-               (Nat.leb (order_validSince order) now)
-               (* TODO: model signature check *))) &&
+               (Nat.leb (order_validSince order) now))) &&
         (* common check *)
         (Nat.eqb (order_validUntil order) 0 || Nat.ltb now (order_validUntil order)) &&
         (Z.leb (order_waiveFeePercentage order) FEE_PERCENTAGE_BASE_Z) &&
@@ -1887,44 +1886,48 @@ Module RingSubmitter.
 
       End AdjustFillAmounts.
 
-      Fixpoint _reserve_orders_fillAmountS
-               (ps: list Participation)
-               (orders: list OrderRuntimeState)
-               (token_spendables: TokenSpendableMap.t)
-               (broker_spendables: BrokerSpendableMap.t)
-        : option (TokenSpendableMap.t * BrokerSpendableMap.t) :=
-        match ps with
-        | nil => Some (token_spendables, broker_spendables)
-        | p :: ps' =>
-          match nth_error orders (part_order_idx p) with
-          | None => None (* invalid case *)
-          | Some ord =>
-            let reserved := part_fillAmountS p in
-            let token_spendables' :=
-                token_spendableS_reserved_inc token_spendables ord reserved in
-            let broker_spendables' :=
-                match ord_rt_brokerInterceptor ord with
-                | O => broker_spendables
-                | _ => broker_spendableS_reserved_inc broker_spendables ord reserved
-                end
-            in _reserve_orders_fillAmountS ps' orders token_spendables' broker_spendables'
-          end
-        end.
+      Section ReserveSpendables.
 
-      Definition reserve_orders_fillAmounts
-                 (st: RingSubmitterRuntimeState) (r: RingRuntimeState)
-        : RingSubmitterRuntimeState :=
-        match _reserve_orders_fillAmountS (ring_rt_participations r)
-                                          (submitter_rt_orders st)
-                                          (submitter_rt_token_spendables st)
-                                          (submitter_rt_broker_spendables st)
-        with
-        | None => st
-        | Some (token_spendables', broker_spendables') =>
-          submitter_update_broker_spendables
-            (submitter_update_token_spendables st token_spendables')
-            broker_spendables'
-        end.
+        Fixpoint _reserve_orders_fillAmountS
+                 (ps: list Participation)
+                 (orders: list OrderRuntimeState)
+                 (token_spendables: TokenSpendableMap.t)
+                 (broker_spendables: BrokerSpendableMap.t)
+        : option (TokenSpendableMap.t * BrokerSpendableMap.t) :=
+          match ps with
+          | nil => Some (token_spendables, broker_spendables)
+          | p :: ps' =>
+            match nth_error orders (part_order_idx p) with
+            | None => None (* invalid case *)
+            | Some ord =>
+              let reserved := part_fillAmountS p in
+              let token_spendables' :=
+                  token_spendableS_reserved_inc token_spendables ord reserved in
+              let broker_spendables' :=
+                  match ord_rt_brokerInterceptor ord with
+                  | O => broker_spendables
+                  | _ => broker_spendableS_reserved_inc broker_spendables ord reserved
+                  end
+              in _reserve_orders_fillAmountS ps' orders token_spendables' broker_spendables'
+            end
+          end.
+
+        Definition reserve_orders_fillAmounts
+                   (st: RingSubmitterRuntimeState) (r: RingRuntimeState)
+          : RingSubmitterRuntimeState :=
+          match _reserve_orders_fillAmountS (ring_rt_participations r)
+                                            (submitter_rt_orders st)
+                                            (submitter_rt_token_spendables st)
+                                            (submitter_rt_broker_spendables st)
+          with
+          | None => st
+          | Some (token_spendables', broker_spendables') =>
+            submitter_update_broker_spendables
+              (submitter_update_token_spendables st token_spendables')
+              broker_spendables'
+          end.
+
+      End ReserveSpendables.
 
       Definition fee_paid_in_tokenB
                  (p: Participation) (orders: list OrderRuntimeState) : bool :=
