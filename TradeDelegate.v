@@ -76,25 +76,25 @@ Module TradeDelegate.
       {|
         fspec_require :=
           fun wst =>
-                let st := wst_trade_delegate_state wst in
-                is_owner st sender /\ addr <> 0 /\ is_authorized_address st sender;
+            let st := wst_trade_delegate_state wst in
+            is_owner st sender /\ addr <> 0 /\ is_authorized_address st sender;
 
         fspec_trans :=
           fun wst wst' retval =>
             let st := wst_trade_delegate_state wst in
             wst' = wst_update_trade_delegate
-                    wst
-                    {|
-                        delegate_owner := delegate_owner st;
-                        delegate_suspended := delegate_suspended st;
-                        delegate_authorizedAddresses := A2B.upd (delegate_authorizedAddresses st) addr false;
-                        delegate_filled := delegate_filled st;
-                        delegate_cancelled := delegate_cancelled st;
-                        delegate_cutoffs := delegate_cutoffs st;
-                        delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-                        delegate_cutoffsOwner := delegate_cutoffsOwner st;
-                        delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-                    |} /\
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := A2B.upd (delegate_authorizedAddresses st) addr false;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled := delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
             retval = RetNone;
 
         fspec_events :=
@@ -129,7 +129,7 @@ Module TradeDelegate.
 
     Inductive transfer_params
               (wst: WorldState) (sender: address) (params: list TransferParam)
-              : WorldState -> list Event -> Prop :=
+    : WorldState -> list Event -> Prop :=
     | transfer_nil:
         params = nil ->
         transfer_params wst sender params wst nil
@@ -315,7 +315,7 @@ Module TradeDelegate.
         fspec_events :=
           fun wst events =>
             events = nil;
-       |}.
+      |}.
 
   End SetTradingPairCutOffs.
 
@@ -395,29 +395,29 @@ Module TradeDelegate.
 
     Definition is_not_cancelled
                (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
-    :=
-      (*AH2B.get (delegate_cancelled st) (broker, hash) = false.*)
-      (* TODO: to be defined *)
-       if AH2B.get (delegate_cancelled st) (broker, hash) 
-       then true
-       else false.
+      :=
+        (*AH2B.get (delegate_cancelled st) (broker, hash) = false.*)
+        (* TODO: to be defined *)
+        if AH2B.get (delegate_cancelled st) (broker, hash)
+        then true
+        else false.
 
     Definition is_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address) (tokenPair: bytes20)
-         :=
-         if (Nat.ltb (order_param_validSince param) 
-              (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)))
-            || (Nat.ltb (order_param_validSince param) 
-              (A2V.get (delegate_cutoffs st) (broker)))
-            || (Nat.ltb (order_param_validSince param) 
-              (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)))
-            || (Nat.ltb (order_param_validSince param) 
-              (AA2V.get (delegate_cutoffsOwner st) (broker, owner)))
-            then false
-            else true.
+      :=
+        if (Nat.ltb (order_param_validSince param)
+                    (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)))
+           || (Nat.ltb (order_param_validSince param)
+                      (A2V.get (delegate_cutoffs st) (broker)))
+           || (Nat.ltb (order_param_validSince param)
+                      (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)))
+           || (Nat.ltb (order_param_validSince param)
+                      (AA2V.get (delegate_cutoffsOwner st) (broker, owner)))
+        then false
+        else true.
 
-    Definition is_not_cancelled_and_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address) 
-          (hash tokenPair: bytes20) :=
-            is_not_cancelled st broker hash tokenPair && is_valid st param broker owner tokenPair.
+    Definition is_not_cancelled_and_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address)
+               (hash tokenPair: bytes20) :=
+      is_not_cancelled st broker hash tokenPair && is_valid st param broker owner tokenPair.
 
     Fixpoint build_fills
              (st: TradeDelegateState) (params: list OrderParam)
@@ -425,7 +425,7 @@ Module TradeDelegate.
       match params with
       | nil => nil
       | param :: params' =>
-        let fill := 
+        let fill :=
             if (is_not_cancelled_and_valid)
                  st param (order_param_broker param) (order_param_owner param)(order_param_hash param) (order_param_tradingPair param)
             then
@@ -467,18 +467,18 @@ Module TradeDelegate.
           fun wst wst' retval =>
             let st := wst_trade_delegate_state wst in
             wst' = wst_update_trade_delegate
-                        wst
-                        {|
-                            delegate_owner := delegate_owner st;
-                            delegate_suspended := true; (*TODO 如何更新一个值 使用upd?*)
-                            delegate_authorizedAddresses := delegate_authorizedAddresses st;
-                            delegate_filled := delegate_filled st;
-                            delegate_cancelled :=delegate_cancelled st;
-                            delegate_cutoffs := delegate_cutoffs st;
-                            delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-                            delegate_cutoffsOwner := delegate_cutoffsOwner st;
-                            delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-                        |} /\
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := true; (*TODO 如何更新一个值 使用upd?*)
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled :=delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
             retval = RetNone;
 
         fspec_events :=
@@ -502,19 +502,19 @@ Module TradeDelegate.
           fun wst wst' retval =>
             let st := wst_trade_delegate_state wst in
             wst' = wst_update_trade_delegate
-              wst
-              {|
-                 delegate_owner := delegate_owner st;
-                 delegate_suspended := false; (*TODO 如何更新一个值 使用upd?*)
-                 delegate_authorizedAddresses := delegate_authorizedAddresses st;
-                 delegate_filled := delegate_filled st;
-                 delegate_cancelled :=delegate_cancelled st;
-                 delegate_cutoffs := delegate_cutoffs st;
-                 delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-                 delegate_cutoffsOwner := delegate_cutoffsOwner st;
-                 delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-              |} /\
-              retval = RetNone;
+                     wst
+                     {|
+                       delegate_owner := delegate_owner st;
+                       delegate_suspended := false; (*TODO 如何更新一个值 使用upd?*)
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled :=delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
+            retval = RetNone;
 
         fspec_events :=
           fun wst events =>
@@ -536,18 +536,18 @@ Module TradeDelegate.
           fun wst wst' retval =>
             let st := wst_trade_delegate_state wst in
             wst' = wst_update_trade_delegate
-              wst
-            {|
-                delegate_owner := 0; (*TODO upd?*)
-                delegate_suspended := delegate_suspended st;
-                delegate_authorizedAddresses := delegate_authorizedAddresses st;
-                delegate_filled := delegate_filled st;
-                delegate_cancelled :=delegate_cancelled st;
-                delegate_cutoffs := delegate_cutoffs st;
-                delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-                delegate_cutoffsOwner := delegate_cutoffsOwner st;
-                delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
-            |} /\
+                     wst
+                     {|
+                       delegate_owner := 0; (*TODO upd?*)
+                       delegate_suspended := delegate_suspended st;
+                       delegate_authorizedAddresses := delegate_authorizedAddresses st;
+                       delegate_filled := delegate_filled st;
+                       delegate_cancelled :=delegate_cancelled st;
+                       delegate_cutoffs := delegate_cutoffs st;
+                       delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
+                       delegate_cutoffsOwner := delegate_cutoffsOwner st;
+                       delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
+                     |} /\
             retval = RetNone;
 
         fspec_events :=
@@ -603,13 +603,13 @@ Module TradeDelegate.
       kill_spec sender
     end.
 
-    Definition model
-               (wst: WorldState)
-               (msg: TradeDelegateMsg)
-               (wst': WorldState)
-               (retval: RetVal)
-               (events: list Event)
-      : Prop :=
-      fspec_sat (get_spec msg) wst wst' retval events.
+  Definition model
+             (wst: WorldState)
+             (msg: TradeDelegateMsg)
+             (wst': WorldState)
+             (retval: RetVal)
+             (events: list Event)
+    : Prop :=
+    fspec_sat (get_spec msg) wst wst' retval events.
 
 End TradeDelegate.
