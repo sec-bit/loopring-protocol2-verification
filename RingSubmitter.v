@@ -1162,6 +1162,52 @@ Module RingSubmitter.
 
   Section SubmitRings.
 
+    Section Aux.
+
+      Definition rings_preserve (st st': RingSubmitterRuntimeState) : Prop :=
+        forall n,
+          (forall r,
+              nth_error (submitter_rt_rings st) n = Some r ->
+              exists r',
+                nth_error (submitter_rt_rings st') n = Some r' /\
+                ring_rt_static r' = ring_rt_static r) /\
+          (nth_error (submitter_rt_rings st) n = None ->
+           nth_error (submitter_rt_rings st') n = None).
+
+    End Aux.
+
+    Section SubRing.
+
+      Definition ring_has_subrings
+                 (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
+        exists p p',
+          p <> p' /\
+          In p (ring_rt_participations r) /\
+          In p' (ring_rt_participations r) /\
+          forall ord ord',
+            nth_error orders (part_order_idx p) = Some ord /\
+            nth_error orders (part_order_idx p') = Some ord' /\
+            order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
+
+      Definition nth_ring_has_subrings
+                 (rings: list RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+                 (n: nat) : Prop :=
+        forall r,
+          nth_error rings n = Some r ->
+          ring_has_subrings r orders.
+
+      Definition subrings_preserve (st st': RingSubmitterRuntimeState) : Prop :=
+        forall n,
+          nth_ring_has_subrings (submitter_rt_rings st) (submitter_rt_orders st) n ->
+          nth_ring_has_subrings (submitter_rt_rings st') (submitter_rt_orders st') n.
+
+    End SubRing.
+
+    Definition st_preserve (st st': RingSubmitterRuntimeState) : Prop :=
+      rings_preserve st st' /\
+      subrings_preserve st st'.
+
     Section UpdateOrdersHashes.
 
       Fixpoint update_orders_hashes
@@ -1195,7 +1241,8 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               wst' = wst /\
               st' = submitter_update_orders
-                      st (update_orders_hashes (submitter_rt_orders st));
+                      st (update_orders_hashes (submitter_rt_orders st)) /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1279,6 +1326,7 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
+              st_preserve st st' /\
               forall wst'' orders' events,
                 update_orders_broker_interceptor
                   wst (submitter_rt_orders st) wst'' orders' events /\
@@ -1288,11 +1336,11 @@ Module RingSubmitter.
 
           subspec_events :=
             fun wst st events =>
+              (forall r, ~ In (EvtRingSkipped r) events) /\
               forall wst' orders' events',
                 update_orders_broker_interceptor
                   wst (submitter_rt_orders st) wst' orders' events' /\
-                events = events' /\
-                (forall r, ~ In (EvtRingSkipped r) events)
+                events = events'
           ;
         |}.
 
@@ -1378,6 +1426,7 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
+              st_preserve st st' /\
               forall fills events,
                 batchGetFilledAndCheckCancelled_success wst st fills wst' events /\
                 forall orders',
@@ -1387,6 +1436,7 @@ Module RingSubmitter.
 
           subspec_events :=
             fun wst st events =>
+              (forall r, ~ In (EvtRingSkipped r) events) /\
               forall fills wst',
                 batchGetFilledAndCheckCancelled_success wst st fills wst' events
           ;
@@ -1458,11 +1508,13 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               wst' = wst /\
+              st_preserve st st' /\
               let orders' := update_orders_valid
                                (submitter_rt_orders st)
                                (block_timestamp (wst_block_state wst)) in
               let orders' := update_orders_p2p orders' in
-              st' = submitter_update_orders st orders';
+              st' = submitter_update_orders st orders'
+          ;
 
           subspec_events :=
             fun wst st events =>
@@ -1518,7 +1570,8 @@ Module RingSubmitter.
               st' = submitter_update_rings
                       st
                       (update_rings_hash
-                         (submitter_rt_rings st) (submitter_rt_orders st));
+                         (submitter_rt_rings st) (submitter_rt_orders st)) /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1567,7 +1620,8 @@ Module RingSubmitter.
               st' = submitter_update_mining
                       st
                       (update_mining_hash
-                         (submitter_rt_mining st) (submitter_rt_rings st));
+                         (submitter_rt_mining st) (submitter_rt_rings st)) /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1617,7 +1671,8 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               wst' = wst /\
-              st' = update_miner_interceptor st;
+              st' = update_miner_interceptor st /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1666,7 +1721,7 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
-              wst' = wst /\ st' = st;
+              wst' = wst /\ st' = st /\ st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1722,7 +1777,8 @@ Module RingSubmitter.
               st' = submitter_update_orders
                       st
                       (check_orders_dual_sig (mining_rt_hash (submitter_rt_mining st))
-                                             (submitter_rt_orders st));
+                                             (submitter_rt_orders st)) /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1787,17 +1843,6 @@ Module RingSubmitter.
           let ps := ring_rt_participations r in
           1 < length ps <= 8 /\
           _ring_orders_valid orders nil ps.
-
-        Definition ring_has_subrings
-                   (r: RingRuntimeState) (orders: list OrderRuntimeState) : Prop :=
-          exists p p',
-            p <> p' /\
-            In p (ring_rt_participations r) /\
-            In p' (ring_rt_participations r) /\
-            forall ord ord',
-              nth_error orders (part_order_idx p) = Some ord /\
-              nth_error orders (part_order_idx p') = Some ord' /\
-              order_tokenS (ord_rt_order ord) = order_tokenS (ord_rt_order ord').
 
       End PreCheckRingValid.
 
@@ -2417,6 +2462,7 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
+              st_preserve st st' /\
               forall events,
                 _rings_check_and_calc_fills_fees
                   wst st nil (submitter_rt_rings st) wst' st' events
@@ -2424,6 +2470,7 @@ Module RingSubmitter.
 
           subspec_events :=
             fun wst st events =>
+              forall r, ~ In (EvtRingSkipped r) events /\
               forall wst'' st'',
                 _rings_check_and_calc_fills_fees
                   wst st nil (submitter_rt_rings st) wst'' st'' events
@@ -2471,7 +2518,8 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               wst' = wst /\
               st' = submitter_update_orders
-                      st (validate_AllOrNone (submitter_rt_orders st));
+                      st (validate_AllOrNone (submitter_rt_orders st)) /\
+              st_preserve st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -2950,12 +2998,19 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               st' = st /\
+              st_preserve st st' /\
               forall events,
                 calc_and_make_payments wst st wst' events
           ;
 
           subspec_events :=
             fun wst st events =>
+              (forall n r,
+                  nth_ring_has_subrings
+                    (submitter_rt_rings st) (submitter_rt_orders st) n ->
+                  nth_error (submitter_rt_rings st) n = Some r ->
+                  In (EvtRingSkipped (ring_rt_static r)) events
+              ) /\
               forall wst',
                 calc_and_make_payments wst st wst' events
           ;
@@ -2970,72 +3025,114 @@ Module RingSubmitter.
         funcT_subspec (calc_and_make_payments_func sender orders rings mining)
                       (calc_and_make_payments_subspec sender orders rings mining).
 
-    Definition SubmitRingsSubSpecFunc :=
-      address -> list Order -> list Ring -> Mining -> SubSpec_funcT.
+    (* Definition SubmitRingsSubSpecFunc := *)
+    (*   address -> list Order -> list Ring -> Mining -> SubSpec_funcT. *)
 
-    Definition submit_rings_subspec_func_seq
-               (f f': SubmitRingsSubSpecFunc) : SubmitRingsSubSpecFunc :=
-      fun sender orders rings mining wst st =>
-        match f sender orders rings mining wst st with
-        | (wst', st', events) =>
-          match f' sender orders rings mining wst' st' with
-          | (wst'', st'', events') => (wst'', st'', events ++ events')
-          end
-        end.
+    (* Definition submit_rings_subspec_func_seq *)
+    (*            (f f': SubmitRingsSubSpecFunc) : SubmitRingsSubSpecFunc := *)
+    (*   fun sender orders rings mining wst st => *)
+    (*     match f sender orders rings mining wst st with *)
+    (*     | (wst', st', events) => *)
+    (*       match f' sender orders rings mining wst' st' with *)
+    (*       | (wst'', st'', events') => (wst'', st'', events ++ events') *)
+    (*       end *)
+    (*     end. *)
 
-    Notation "s ;; s'" := (submit_rings_subspec_func_seq s s') (left associativity, at level 400).
+    (* Notation "s ;; s'" := (submit_rings_subspec_func_seq s s') (left associativity, at level 400). *)
 
-    Definition submit_rings_subspec_func_to_fspec
-               (_f: SubmitRingsSubSpecFunc)
-               (sender: address) (orders: list Order) (rings: list Ring) (mining: Mining)
-      : FSpec :=
-      let f := _f sender orders rings mining in
-      let st := make_rt_submitter_state mining orders rings in
-      {|
-        fspec_require :=
-          fun wst => True;
+    (* Definition submit_rings_subspec_func_to_fspec *)
+    (*            (_f: SubmitRingsSubSpecFunc) *)
+    (*            (sender: address) (orders: list Order) (rings: list Ring) (mining: Mining) *)
+    (*   : FSpec := *)
+    (*   let f := _f sender orders rings mining in *)
+    (*   let st := make_rt_submitter_state mining orders rings in *)
+    (*   {| *)
+    (*     fspec_require := *)
+    (*       fun wst => True; *)
 
-        fspec_trans :=
-            fun wst wst' retval =>
-              retval = RetNone /\
-              match f wst st with
-              | (wst'', _, _) => wst' = wst''
-              end;
+    (*     fspec_trans := *)
+    (*         fun wst wst' retval => *)
+    (*           retval = RetNone /\ *)
+    (*           match f wst st with *)
+    (*           | (wst'', _, _) => wst' = wst'' *)
+    (*           end; *)
 
-        fspec_events :=
-          fun wst events =>
-            match f wst st with
-            | (_, _, events') => events = events'
-            end;
-      |}.
+    (*     fspec_events := *)
+    (*       fun wst events => *)
+    (*         match f wst st with *)
+    (*         | (_, _, events') => events = events' *)
+    (*         end; *)
+    (*   |}. *)
 
-    Definition submitRings_spec
-               (sender: address)
-               (orders: list Order) (rings: list Ring) (mining: Mining) :=
-      submit_rings_subspec_func_to_fspec
-        (
-           update_orders_hashes_func ;;
-           update_orders_brokers_and_interceptors_func ;;
-           get_filled_and_check_cancelled_func ;;
-           check_orders_func ;;
-           update_rings_hash_func ;;
-           update_mining_hash_func ;;
-           update_miner_interceptor_func ;;
-           check_miner_signature_func ;;
-           check_orders_dual_sig_func ;;
-           calc_fills_and_fees_func ;;
-           validate_AllOrNone_func ;;
-           calc_and_make_payments_func
-        )
-        sender orders rings mining.
+    (* Definition submitRings_spec *)
+    (*            (sender: address) *)
+    (*            (orders: list Order) (rings: list Ring) (mining: Mining) := *)
+    (*   submit_rings_subspec_func_to_fspec *)
+    (*     ( *)
+    (*        update_orders_hashes_func ;; *)
+    (*        update_orders_brokers_and_interceptors_func ;; *)
+    (*        get_filled_and_check_cancelled_func ;; *)
+    (*        check_orders_func ;; *)
+    (*        update_rings_hash_func ;; *)
+    (*        update_mining_hash_func ;; *)
+    (*        update_miner_interceptor_func ;; *)
+    (*        check_miner_signature_func ;; *)
+    (*        check_orders_dual_sig_func ;; *)
+    (*        calc_fills_and_fees_func ;; *)
+    (*        validate_AllOrNone_func ;; *)
+    (*        calc_and_make_payments_func *)
+    (*     ) *)
+    (*     sender orders rings mining. *)
+
+    Inductive SubmitRingsSubSpec : Type :=
+    | SubmitRingsSubSpec_single (subspec: address -> list Order -> list Ring -> Mining -> SubSpec)
+    | SubmitRingsSubSpec_seq (subspec subspec': SubmitRingsSubSpec)
+    .
+
+    Notation "<| s |>" := (SubmitRingsSubSpec_single s).
+    Notation "s ';;' s'" := (SubmitRingsSubSpec_seq s s') (right associativity, at level 400).
+
+    Inductive SubmitRingsSubSpec_sat
+              (sender: address)
+              (orders: list Order)
+              (rings: list Ring)
+              (mining: Mining)
+      : WorldState -> RingSubmitterRuntimeState ->
+        WorldState -> RingSubmitterRuntimeState -> list Event ->
+        SubmitRingsSubSpec -> Prop :=
+    | SubmitRingsSubSpec_single_sat:
+        forall subspec wst st wst' st' events,
+          subspec_require (subspec sender orders rings mining) wst st ->
+          subspec_trans (subspec sender orders rings mining) wst st wst' st' ->
+          subspec_events (subspec sender orders rings mining) wst st events ->
+          SubmitRingsSubSpec_sat sender orders rings mining
+                                 wst st wst' st' events
+                                 (SubmitRingsSubSpec_single subspec)
+
+    | SubmitRingsSubSpec_seq_sat:
+        forall subspec subspec' wst st wst' st' wst'' st'' events events',
+          SubmitRingsSubSpec_sat sender orders rings mining wst st wst' st' events subspec ->
+          SubmitRingsSubSpec_sat sender orders rings mining wst' st' wst'' st'' events' subspec' ->
+          SubmitRingsSubSpec_sat sender orders rings mining
+                                 wst st wst'' st'' (events ++ events')
+                                 (SubmitRingsSubSpec_seq subspec subspec')
+    .
+
+    Definition submitRings_spec :=
+       (<| update_orders_hashes_subspec |> ;;
+        <| update_orders_brokers_and_interceptors_subspec |> ;;
+        <| get_filled_and_check_cancelled_subspec |> ;;
+        <| check_orders_subspec |> ;;
+        <| update_rings_hash_subspec |> ;;
+        <| update_mining_hash_subspec |> ;;
+        <| update_miner_interceptor_subspec |> ;;
+        <| check_miner_signature_subspec |> ;;
+        <| check_orders_dual_sig_subspec |> ;;
+        <| calc_fills_and_fees_subspec |> ;;
+        <| validate_AllOrNone_subspec |> ;;
+        <| calc_and_make_payments_subspec |>).
 
   End SubmitRings.
-
-  Definition get_spec (msg: RingSubmitterMsg) : FSpec :=
-    match msg with
-    | msg_submitRings sender orders rings mining =>
-      submitRings_spec sender orders rings mining
-    end.
 
   Definition model
              (wst: WorldState)
@@ -3044,6 +3141,13 @@ Module RingSubmitter.
              (retval: RetVal)
              (events: list Event)
     : Prop :=
-    fspec_sat (get_spec msg) wst wst' retval events.
+    retval = RetNone /\
+    exists st',
+    forall sender orders rings mining,
+      msg = msg_submitRings sender orders rings mining /\
+      SubmitRingsSubSpec_sat sender orders rings mining
+                             wst (make_rt_submitter_state mining orders rings)
+                             wst' st' events
+                             submitRings_spec.
 
 End RingSubmitter.
