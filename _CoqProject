@@ -23,3 +23,4 @@ Types.v
 
 Props/RingSubmitterProps.v
 Props/TopProps.v
+Props/CalcFillSimplifiedCorrectness.v
