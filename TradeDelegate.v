@@ -393,31 +393,23 @@ Module TradeDelegate.
 
   Section BatchGetFilledAndCheckCancelled.
 
-    Definition is_not_cancelled
-               (st: TradeDelegateState) (broker: address) (hash pair: bytes20)
-      :=
-        (*AH2B.get (delegate_cancelled st) (broker, hash) = false.*)
-        (* TODO: to be defined *)
-        if AH2B.get (delegate_cancelled st) (broker, hash)
-        then true
-        else false.
-
-    Definition is_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address) (tokenPair: bytes20)
-      :=
-        if (Nat.ltb (order_param_validSince param)
-                    (AH2V.get (delegate_tradingPairCutoffs st) (broker, tokenPair)))
-           || (Nat.ltb (order_param_validSince param)
-                      (A2V.get (delegate_cutoffs st) (broker)))
-           || (Nat.ltb (order_param_validSince param)
-                      (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair)))
-           || (Nat.ltb (order_param_validSince param)
-                      (AA2V.get (delegate_cutoffsOwner st) (broker, owner)))
-        then false
-        else true.
-
-    Definition is_not_cancelled_and_valid (st: TradeDelegateState) (param: OrderParam)(broker owner: address)
-               (hash tokenPair: bytes20) :=
-      is_not_cancelled st broker hash tokenPair && is_valid st param broker owner tokenPair.
+    Definition is_cancelled
+               (st: TradeDelegateState) (param: OrderParam)
+    : bool :=
+      let broker := order_param_broker param in
+      let owner := order_param_owner param in
+      let trading_pair := order_param_tradingPair param in
+      let hash := order_param_hash param in
+      let valid_since := order_param_validSince param in
+      AH2B.get (delegate_cancelled st) (broker, hash) &&
+      Nat.leb valid_since
+              (AH2V.get (delegate_tradingPairCutoffs st) (broker, trading_pair)) &&
+      Nat.leb valid_since
+              (A2V.get (delegate_cutoffs st) broker)  &&
+      Nat.leb valid_since
+              (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, trading_pair)) &&
+      Nat.leb valid_since
+              (AA2V.get (delegate_cutoffsOwner st) (broker, owner)).
 
     Fixpoint build_fills
              (st: TradeDelegateState) (params: list OrderParam)
@@ -425,15 +417,11 @@ Module TradeDelegate.
       match params with
       | nil => nil
       | param :: params' =>
-        let fill :=
-            if (is_not_cancelled_and_valid)
-                 st param (order_param_broker param) (order_param_owner param)(order_param_hash param) (order_param_tradingPair param)
-            then
-              Some (H2V.get (delegate_filled st) (order_param_hash param))
-            else
-              None
-        in
-        fill :: build_fills st params'
+        let fill := match is_cancelled st param with
+                    | true => None
+                    | _ => Some (H2V.get (delegate_filled st) (order_param_hash param))
+                    end
+        in fill :: build_fills st params'
       end.
 
     Definition batchGetFilledAndCheckCancelled_spec
