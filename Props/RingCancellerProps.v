@@ -1,5 +1,7 @@
 Require Import
         List
+        Nat
+        Omega
         ZArith.
 Require Import
         Events
@@ -93,3 +95,51 @@ Section CancellOrdersNoSideEffect.
   Qed.
 
 End CancellOrdersNoSideEffect.
+
+
+Section CancelAllOrdersForTradingPairNoSideEffect.
+
+  Definition is_order_cancelled_wst_trading_pair
+             (wst: WorldState) (order: Order) : Prop :=
+    order_validSince order <
+    AH2V.get (delegate_tradingPairCutoffs (wst_trade_delegate_state wst))
+             (order_broker order, lxor (order_tokenS order) (order_tokenB order)).
+
+  Theorem cancelAllOrdersForTradingPair_no_side_effect:
+    forall sender token1 token2 cutoff wst wst' retval events,
+      lr_step wst
+              (MsgRingCanceller (msg_cancelAllOrdersForTradingPair sender token1 token2 cutoff))
+              wst' retval events ->
+      forall order,
+        is_order_cancelled_wst_trading_pair wst order ->
+        is_order_cancelled_wst_trading_pair wst' order.
+  Proof.
+    intros until events; intros Hstep order Hcancelled.
+    destruct Hstep as [Hreq [Htrans _]];
+      simpl in Hreq, Htrans.
+
+    destruct Hreq as [wst'' [events' Hcall]].
+    generalize (Hcall RetNone); intros Hdelegate.
+    destruct Hdelegate as [Hdelegate_req [Hdelegate_trans _]];
+      simpl in Hdelegate_req, Hdelegate_trans.
+    destruct Hdelegate_req as [_ Hlt].
+    destruct Hdelegate_trans as [Hwst'' _].
+
+    destruct Htrans as [_ Htrans].
+    specialize (Htrans wst'' events' Hcall); clear Hcall.
+    subst wst''; subst wst'.
+
+    unfold is_order_cancelled_wst_trading_pair in *; simpl.
+
+    destruct (Nat.eq_dec sender (order_broker order));
+      destruct (Nat.eq_dec (lxor (order_tokenS order) (order_tokenB order))
+                           (lxor token1 token2));
+      subst;
+      solve [ rewrite e0 in *;
+              rewrite AH2V.get_upd_eq; simpl; auto;
+              eapply lt_trans; eauto |
+              rewrite AH2V.get_upd_neq; simpl; auto;
+              intros H; destruct H as [Hsender Hpair]; congruence ].
+  Qed.
+
+End CancelAllOrdersForTradingPairNoSideEffect.
