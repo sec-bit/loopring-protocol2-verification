@@ -43,19 +43,11 @@ Section CancellOrdersNoSideEffect.
 
     destruct (Nat.eq_dec broker' broker);
       destruct (Nat.eq_dec hash' hash);
-      subst; AH2B.msimpl.
-
-    - rewrite <- Hcancelled at 2.
-      apply AH2B.get_upd_neq.
-      simpl. intros H; destruct H as [H0 H1]; congruence.
-
-    - rewrite <- Hcancelled at 2.
-      apply AH2B.get_upd_neq.
-      simpl. intros H; destruct H as [H0 H1]; congruence.
-
-    - rewrite <- Hcancelled at 2.
-      apply AH2B.get_upd_neq.
-      simpl. intros H; destruct H as [H0 H1]; congruence.
+      subst;
+      solve [ AH2B.msimpl |
+              rewrite <- Hcancelled at 2;
+              apply AH2B.get_upd_neq;
+              simpl; intros H; destruct H as [H0 H1]; congruence ].
   Qed.
 
   Lemma cancel_orders_preserve:
