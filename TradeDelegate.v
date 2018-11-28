@@ -401,13 +401,13 @@ Module TradeDelegate.
       let trading_pair := order_param_tradingPair param in
       let hash := order_param_hash param in
       let valid_since := order_param_validSince param in
-      AH2B.get (delegate_cancelled st) (broker, hash) &&
+      AH2B.get (delegate_cancelled st) (broker, hash) ||
       Nat.leb valid_since
-              (AH2V.get (delegate_tradingPairCutoffs st) (broker, trading_pair)) &&
+              (AH2V.get (delegate_tradingPairCutoffs st) (broker, trading_pair)) ||
       Nat.leb valid_since
-              (A2V.get (delegate_cutoffs st) broker)  &&
+              (A2V.get (delegate_cutoffs st) broker)  ||
       Nat.leb valid_since
-              (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, trading_pair)) &&
+              (AAH2V.get (delegate_tradingPairCutoffsOwner st) (broker, owner, trading_pair)) ||
       Nat.leb valid_since
               (AA2V.get (delegate_cutoffsOwner st) (broker, owner)).
 
