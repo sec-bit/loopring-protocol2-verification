@@ -229,3 +229,55 @@ Section CancelAllOrdersOfOwnerNoSideEffect.
   Qed.
 
 End CancelAllOrdersOfOwnerNoSideEffect.
+
+
+Section CancelAllOrdersForTradingPairOfOwnerNoSideEffect.
+
+  Definition is_order_cancelled_wst_trading_pair_owner
+             (wst: WorldState) (order: Order) : Prop :=
+    order_validSince order <
+    AAH2V.get (delegate_tradingPairCutoffsOwner (wst_trade_delegate_state wst))
+              (order_broker order,
+               order_owner order,
+               lxor (order_tokenS order) (order_tokenB order)).
+
+  Theorem cancelAllOrdersForTradingPairOfOwner_no_side_effect:
+    forall sender owner token1 token2 cutoff wst wst' retval events,
+      lr_step wst
+              (MsgRingCanceller (msg_cancelAllOrdersForTradingPairOfOwner
+                                   sender owner token1 token2 cutoff))
+              wst' retval events ->
+      forall order,
+        is_order_cancelled_wst_trading_pair_owner wst order ->
+        is_order_cancelled_wst_trading_pair_owner wst' order.
+  Proof.
+    intros until events; intros Hstep order Hcancelled.
+    destruct Hstep as [Hreq [Htrans _]];
+      simpl in Hreq, Htrans.
+
+    destruct Hreq as [wst'' [events' Hcall]].
+    generalize (Hcall RetNone); intros Hdelegate.
+    destruct Hdelegate as [Hdelegate_req [Hdelegate_trans _]];
+      simpl in Hdelegate_req, Hdelegate_trans.
+    destruct Hdelegate_req as [_ Hlt].
+    destruct Hdelegate_trans as [Hwst'' _].
+
+    destruct Htrans as [_ Htrans].
+    specialize (Htrans wst'' events' Hcall); clear Hcall.
+    subst wst''; subst wst'.
+
+    unfold is_order_cancelled_wst_trading_pair_owner in *; simpl.
+
+    destruct (Nat.eq_dec sender (order_broker order));
+      destruct (Nat.eq_dec owner (order_owner order));
+      destruct (Nat.eq_dec (lxor (order_tokenS order) (order_tokenB order))
+                           (lxor token1 token2));
+      subst;
+      solve [ rewrite e1 in *;
+              rewrite AAH2V.get_upd_eq; simpl; auto;
+              eapply lt_trans; eauto |
+              rewrite AAH2V.get_upd_neq; simpl; auto;
+              intros H; destruct H as [[Hsender Howner] Hpair]; congruence ].
+  Qed.
+
+End CancelAllOrdersForTradingPairOfOwnerNoSideEffect.
