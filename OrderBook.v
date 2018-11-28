@@ -17,8 +17,8 @@ Module OrderBook.
         fspec_require :=
           fun wst =>
             (sender = order_owner order \/ sender = order_broker order) /\
-            H2O.find (ob_orders (wst_order_book_state wst))
-                     (get_order_hash order) = None
+            H2O.map.find (get_order_hash order)
+                         (ob_orders (wst_order_book_state wst))  = None
         ;
 
         fspec_trans :=

@@ -19,10 +19,10 @@ Module BrokerRegistry.
     Definition get_broker_info
                (m: BrokersMap.t) (owner broker: address)
       : option Broker :=
-      match BrokersMap.find m owner with
+      match BrokersMap.map.find owner m with
       | None => None
       | Some brokers =>
-        match Brokers.find brokers broker with
+        match Brokers.map.find broker brokers with
         | None => None
         | Some broker_info => Some broker_info
         end
