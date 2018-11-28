@@ -143,3 +143,43 @@ Section CancelAllOrdersForTradingPairNoSideEffect.
   Qed.
 
 End CancelAllOrdersForTradingPairNoSideEffect.
+
+
+Section CancelAllOrdersNoSideEffect.
+
+  Definition is_order_cancelled_wst_broker
+             (wst: WorldState) (order: Order) : Prop :=
+    order_validSince order <
+    A2V.get (delegate_cutoffs (wst_trade_delegate_state wst)) (order_broker order).
+
+  Theorem cancelAllOrders_no_side_effect:
+    forall sender cutoff wst wst' retval events,
+      lr_step wst
+              (MsgRingCanceller (msg_cancelAllOrders sender cutoff))
+              wst' retval events ->
+      forall order,
+        is_order_cancelled_wst_broker wst order ->
+        is_order_cancelled_wst_broker wst' order.
+  Proof.
+    intros until events; intros Hstep order Hcancelled.
+    destruct Hstep as [Hreq [Htrans _]];
+      simpl in Hreq, Htrans.
+
+    destruct Hreq as [wst'' [events' Hcall]].
+    generalize (Hcall RetNone); intros Hdelegate.
+    destruct Hdelegate as [Hdelegate_req [Hdelegate_trans _]];
+      simpl in Hdelegate_req, Hdelegate_trans.
+    destruct Hdelegate_req as [_ Hlt].
+    destruct Hdelegate_trans as [Hwst'' _].
+
+    destruct Htrans as [_ Htrans].
+    specialize (Htrans wst'' events' Hcall); clear Hcall.
+    subst wst''; subst wst'.
+
+    unfold is_order_cancelled_wst_broker in *; simpl.
+
+    destruct (Nat.eq_dec sender (order_broker order));
+      subst; A2V.msimpl; solve [ omega | auto ].
+  Qed.
+
+End CancelAllOrdersNoSideEffect.
