@@ -183,3 +183,49 @@ Section CancelAllOrdersNoSideEffect.
   Qed.
 
 End CancelAllOrdersNoSideEffect.
+
+
+Section CancelAllOrdersOfOwnerNoSideEffect.
+
+  Definition is_order_cancelled_wst_broker_owner
+             (wst: WorldState) (order: Order) : Prop :=
+    order_validSince order <
+    AA2V.get (delegate_cutoffsOwner (wst_trade_delegate_state wst))
+             (order_broker order, order_owner order).
+
+  Theorem cancelAllOrdersOfOwner_no_side_effect:
+    forall sender owner cutoff wst wst' retval events,
+      lr_step wst
+              (MsgRingCanceller (msg_cancelAllOrdersOfOwner sender owner cutoff))
+              wst' retval events ->
+      forall order,
+        is_order_cancelled_wst_broker_owner wst order ->
+        is_order_cancelled_wst_broker_owner wst' order.
+  Proof.
+    intros until events; intros Hstep order Hcancelled.
+    destruct Hstep as [Hreq [Htrans _]];
+      simpl in Hreq, Htrans.
+
+    destruct Hreq as [wst'' [events' Hcall]].
+    generalize (Hcall RetNone); intros Hdelegate.
+    destruct Hdelegate as [Hdelegate_req [Hdelegate_trans _]];
+      simpl in Hdelegate_req, Hdelegate_trans.
+    destruct Hdelegate_req as [_ Hlt].
+    destruct Hdelegate_trans as [Hwst'' _].
+
+    destruct Htrans as [_ Htrans].
+    specialize (Htrans wst'' events' Hcall); clear Hcall.
+    subst wst''; subst wst'.
+
+    unfold is_order_cancelled_wst_broker_owner in *; simpl.
+
+    destruct (Nat.eq_dec sender (order_broker order));
+      destruct (Nat.eq_dec owner (order_owner order));
+      subst;
+      solve [ AA2V.msimpl; omega |
+              rewrite AA2V.get_upd_neq; simpl;
+              [ auto |
+                intros H; destruct H as [Hbroker Howner]; congruence ] ].
+  Qed.
+
+End CancelAllOrdersOfOwnerNoSideEffect.
