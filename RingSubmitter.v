@@ -1164,6 +1164,23 @@ Module RingSubmitter.
 
     Section Aux.
 
+      Definition make_order_param (ord: OrderRuntimeState) : OrderParam :=
+        let order := ord_rt_order ord in
+        {|
+          order_param_broker := order_broker order;
+          order_param_owner  := order_owner order;
+          order_param_hash   := ord_rt_hash ord;
+          order_param_validSince := order_validSince order;
+          order_param_tradingPair := Nat.lxor (order_tokenS order) (order_tokenB order);
+        |}.
+
+      Fixpoint make_order_params
+               (orders: list OrderRuntimeState) : list OrderParam :=
+        match orders with
+        | nil => nil
+        | order :: orders' => make_order_param order :: make_order_params orders'
+        end.
+
       Definition rings_preserve (st st': RingSubmitterRuntimeState) : Prop :=
         forall n,
           (forall r,
@@ -1173,6 +1190,14 @@ Module RingSubmitter.
                 ring_rt_static r' = ring_rt_static r) /\
           (nth_error (submitter_rt_rings st) n = None ->
            nth_error (submitter_rt_rings st') n = None).
+
+      Definition orders_preserve (st st': RingSubmitterRuntimeState) : Prop :=
+        forall n,
+          (forall ord,
+              nth_error (submitter_rt_orders st) n = Some ord ->
+              exists ord', nth_error (submitter_rt_orders st') n = Some ord') /\
+          (nth_error (submitter_rt_orders st) n = None ->
+           nth_error (submitter_rt_orders st') n = None).
 
     End Aux.
 
@@ -1204,9 +1229,37 @@ Module RingSubmitter.
 
     End SubRing.
 
+    Section Cancellation.
+
+      Definition nth_ring_mth_order_cancelled
+                 (wst: WorldState)
+                 (rings: list RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+                 (n m: nat) : Prop :=
+        forall r idx ord,
+          nth_error rings n = Some r ->
+          nth_error (ring_orders (ring_rt_static r)) m = Some idx ->
+          nth_error orders idx = Some ord ->
+          TradeDelegate.is_cancelled (wst_trade_delegate_state wst) (make_order_param ord) = true.
+
+      Definition ring_has_cancelled_order_preserve
+                 (wst wst': WorldState)
+                 (st st': RingSubmitterRuntimeState) : Prop :=
+        forall n m,
+          nth_ring_mth_order_cancelled wst (submitter_rt_rings st) (submitter_rt_orders st) n m ->
+          nth_ring_mth_order_cancelled wst' (submitter_rt_rings st') (submitter_rt_orders st') n m.
+
+    End Cancellation.
+
     Definition st_preserve (st st': RingSubmitterRuntimeState) : Prop :=
       rings_preserve st st' /\
-      subrings_preserve st st'.
+      subrings_preserve st st' /\
+      orders_preserve st st'.
+
+    Definition wst_preserve
+               (wst wst': WorldState)
+               (st st': RingSubmitterRuntimeState) : Prop :=
+      ring_has_cancelled_order_preserve wst wst' st st'.
 
     Section UpdateOrdersHashes.
 
@@ -1242,7 +1295,8 @@ Module RingSubmitter.
               wst' = wst /\
               st' = submitter_update_orders
                       st (update_orders_hashes (submitter_rt_orders st)) /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1327,6 +1381,7 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               st_preserve st st' /\
+              wst_preserve wst wst' st st' /\
               forall wst'' orders' events,
                 update_orders_broker_interceptor
                   wst (submitter_rt_orders st) wst'' orders' events /\
@@ -1354,23 +1409,6 @@ Module RingSubmitter.
                       (update_orders_brokers_and_interceptors_subspec sender orders rings mining).
 
     Section GetFilledAndCheckCancelled.
-
-      Fixpoint make_order_params
-               (orders: list OrderRuntimeState) : list OrderParam :=
-        match orders with
-        | nil => nil
-        | order :: orders' =>
-          let static_order := ord_rt_order order in
-          let param :=
-              {|
-                order_param_broker := order_broker static_order;
-                order_param_owner  := order_owner static_order;
-                order_param_hash   := ord_rt_hash order;
-                order_param_validSince := order_validSince static_order;
-                order_param_tradingPair := Nat.lxor (order_tokenS static_order) (order_tokenB static_order);
-              |}
-          in param :: make_order_params orders'
-        end.
 
       Definition batchGetFilledAndCheckCancelled_success
                  (wst: WorldState) (st: RingSubmitterRuntimeState)
@@ -1427,6 +1465,7 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               st_preserve st st' /\
+              wst_preserve wst wst' st st' /\
               forall fills events,
                 batchGetFilledAndCheckCancelled_success wst st fills wst' events /\
                 forall orders',
@@ -1509,6 +1548,7 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               wst' = wst /\
               st_preserve st st' /\
+              wst_preserve wst wst' st st' /\
               let orders' := update_orders_valid
                                (submitter_rt_orders st)
                                (block_timestamp (wst_block_state wst)) in
@@ -1571,7 +1611,8 @@ Module RingSubmitter.
                       st
                       (update_rings_hash
                          (submitter_rt_rings st) (submitter_rt_orders st)) /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1621,7 +1662,8 @@ Module RingSubmitter.
                       st
                       (update_mining_hash
                          (submitter_rt_mining st) (submitter_rt_rings st)) /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1672,7 +1714,8 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               wst' = wst /\
               st' = update_miner_interceptor st /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1721,7 +1764,9 @@ Module RingSubmitter.
 
           subspec_trans :=
             fun wst st wst' st' =>
-              wst' = wst /\ st' = st /\ st_preserve st st';
+              wst' = wst /\ st' = st /\
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -1778,7 +1823,8 @@ Module RingSubmitter.
                       st
                       (check_orders_dual_sig (mining_rt_hash (submitter_rt_mining st))
                                              (submitter_rt_orders st)) /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -2463,6 +2509,7 @@ Module RingSubmitter.
           subspec_trans :=
             fun wst st wst' st' =>
               st_preserve st st' /\
+              wst_preserve wst wst' st st' /\
               forall events,
                 _rings_check_and_calc_fills_fees
                   wst st nil (submitter_rt_rings st) wst' st' events
@@ -2519,7 +2566,8 @@ Module RingSubmitter.
               wst' = wst /\
               st' = submitter_update_orders
                       st (validate_AllOrNone (submitter_rt_orders st)) /\
-              st_preserve st st';
+              st_preserve st st' /\
+              wst_preserve wst wst' st st';
 
           subspec_events :=
             fun wst st events => events = nil;
@@ -2999,6 +3047,7 @@ Module RingSubmitter.
             fun wst st wst' st' =>
               st' = st /\
               st_preserve st st' /\
+              wst_preserve wst wst' st st' /\
               forall events,
                 calc_and_make_payments wst st wst' events
           ;
@@ -3008,6 +3057,12 @@ Module RingSubmitter.
               (forall n r,
                   nth_ring_has_subrings
                     (submitter_rt_rings st) (submitter_rt_orders st) n ->
+                  nth_error (submitter_rt_rings st) n = Some r ->
+                  In (EvtRingSkipped (ring_rt_static r)) events
+              ) /\
+              (forall n m r,
+                  nth_ring_mth_order_cancelled
+                    wst (submitter_rt_rings st) (submitter_rt_orders st) n m ->
                   nth_error (submitter_rt_rings st) n = Some r ->
                   In (EvtRingSkipped (ring_rt_static r)) events
               ) /\
