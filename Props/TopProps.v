@@ -35,18 +35,18 @@ Axiom RingCanceller_msg_sender_not_zero:
 
 Definition TradeDelegateMsg_sender (msg: TradeDelegateMsg) : address :=
   match msg with
-  | msg_authorizeAddress sender _ 
+  | msg_authorizeAddress sender _
   | msg_deauthorizeAddress sender _
   | msg_isAddressAuthorized sender _
   | msg_batchTransfer sender _
   | msg_batchUpdateFilled sender _
-  | msg_setCancelled sender _ _ 
-  | msg_setCutoffs sender _ _ 
-  | msg_setTradingPairCutoffs sender _ _ _ 
-  | msg_setCutoffsOfOwner sender _ _ _ 
-  | msg_setTradingPairCutoffsOfOwner sender _ _ _ _ 
-  | msg_batchGetFilledAndCheckCancelled sender _ 
-  | msg_suspend sender 
+  | msg_setCancelled sender _ _
+  | msg_setCutoffs sender _ _
+  | msg_setTradingPairCutoffs sender _ _ _
+  | msg_setCutoffsOfOwner sender _ _ _
+  | msg_setTradingPairCutoffsOfOwner sender _ _ _ _
+  | msg_batchGetFilledAndCheckCancelled sender _
+  | msg_suspend sender
   | msg_resume sender
   | msg_kill sender
     => sender
@@ -64,35 +64,35 @@ Inductive MsgTypeTradeDelegate : Type :=
 
 Definition TradeDelegateMsgType (msg: TradeDelegateMsg) : MsgTypeTradeDelegate :=
   match msg with
-  | msg_authorizeAddress sender _ 
+  | msg_authorizeAddress sender _
   | msg_deauthorizeAddress sender _
-  | msg_suspend sender 
+  | msg_suspend sender
   | msg_resume sender
   | msg_kill sender
     => ControlMsg
-        
+
   | msg_batchTransfer sender _
   | msg_batchUpdateFilled sender _
-  | msg_setCancelled sender _ _ 
-  | msg_setCutoffs sender _ _ 
-  | msg_setTradingPairCutoffs sender _ _ _ 
-  | msg_setCutoffsOfOwner sender _ _ _ 
-  | msg_setTradingPairCutoffsOfOwner sender _ _ _ _ 
+  | msg_setCancelled sender _ _
+  | msg_setCutoffs sender _ _
+  | msg_setTradingPairCutoffs sender _ _ _
+  | msg_setCutoffsOfOwner sender _ _ _
+  | msg_setTradingPairCutoffsOfOwner sender _ _ _ _
     =>TransactionMsg
-    
+
   | msg_isAddressAuthorized sender _
-  | msg_batchGetFilledAndCheckCancelled sender _ 
+  | msg_batchGetFilledAndCheckCancelled sender _
     => View
   end.
 
-(** message corresponds to transactions, 
+(** message corresponds to transactions,
     notably RingSubmitter/RingCanceller messages *)
 Definition transaction_msg (msg: Message) : Prop :=
   match msg with
-  | MsgRingSubmitter _ 
+  | MsgRingSubmitter _
   | MsgRingCanceller _
     => True
-  | MsgTradeDelegate msg' 
+  | MsgTradeDelegate msg'
     => TradeDelegateMsgType msg' = TransactionMsg
   | _
     => False
@@ -104,11 +104,11 @@ Definition transaction_event (evt: Event) : Prop :=
   | EvtAddressAuthorized _
   | EvtAddressDeauthorized _
   | EvtOrderCancelled _ _
-  | EvtAllOrdersCancelledForTradingPair _ _ _ _ 
+  | EvtAllOrdersCancelledForTradingPair _ _ _ _
   | EvtAllOrdersCancelled _ _
-  | EvtOrdersCancelledByBroker _ _ _ 
-  | EvtAllOrdersCancelledForTradingPairByBroker _ _ _ _ _ 
-  | EvtAllOrdersCancelledByBroker _ _ _ 
+  | EvtOrdersCancelledByBroker _ _ _
+  | EvtAllOrdersCancelledForTradingPairByBroker _ _ _ _ _
+  | EvtAllOrdersCancelledByBroker _ _ _
   | EvtOwnershipTransferred _ _
     => True
   | _
@@ -137,17 +137,17 @@ Proof.
   intros. subst; destruct msgs0; inv Heqmsgs0.
   subst. intros.
   destruct msgs; simpl in *.
-  
+
   inv Heqmsgs0. do 7 eexists.
   split. econstructor; auto.
   split. eauto.
-  split. eauto. eauto. 
+  split. eauto. eauto.
 
   inv Heqmsgs0. edestruct IHlr_steps. eauto.
   destruct H as (wst1 & retval0 & retval1 & events0 & events1 & events'''
                  & Hsteps0 & Hstep & Hsteps' & Hevents).
   do 7 eexists.
-  split. eapply lr_steps_cons; eauto. 
+  split. eapply lr_steps_cons; eauto.
   split. eauto.
   split. eauto. rewrite <- Hevents, app_assoc_reverse.  auto.
 Qed.
@@ -209,7 +209,7 @@ Lemma RingSubmitter_no_further_msg_once_suspended:
     ~ RingSubmitter.RingSubmitter.model wst msg wst' retval events.
 Proof.
 Admitted.
-  
+
 Lemma RingCanceller_no_further_msg_once_suspended:
   forall wst msg wst' retval events,
     delegate_suspended (wst_trade_delegate_state wst) = true ->
@@ -217,7 +217,7 @@ Lemma RingCanceller_no_further_msg_once_suspended:
 Proof.
   intros. intro. destruct H0 as [Hrequire _].
   destruct msg eqn:Hmsg; simpl in *.
-  
+
   intuition destruct H1 as (? & ? & ?). inv H1; auto.
   eapply TradeDelegate_no_further_transaction_msg_once_suspended.
   eauto. eauto. simpl. auto.
@@ -323,7 +323,7 @@ Proof.
     admit.
   }
 Admitted.
-    
+
 Theorem no_further_LPSC_transaction_once_suspended:
   forall msgs owner msgs' events wst' retval,
     lr_model (msgs ++ MsgSuspend owner :: msgs') wst' retval events ->
@@ -355,7 +355,7 @@ Proof.
     intros. intro. eapply H; eauto.
   }
 Qed.
-    
+
 (** * No futher LPSC transactions once TradeDelegate is killed *)
 
 Definition EvtKill (owner: address) : Event :=
@@ -405,7 +405,7 @@ Lemma kill_inv:
     /\ delegate_suspended (wst_trade_delegate_state wst') = true.
 Proof.
   intros wst msg wst' retval events Hkilled Hsuspended Hstep.
-  destruct msg; simpl in *; try (contradict Hstep; eauto; fail). 
+  destruct msg; simpl in *; try (contradict Hstep; eauto; fail).
   destruct (TradeDelegateMsgType msg) eqn:HmsgType;
     try (contradict HmsgType; eauto; fail).
   eapply TradeDelegate_view_msg_state_unchanged in HmsgType; eauto. subst; auto.
@@ -443,7 +443,7 @@ Proof.
   apply kill_world_state in Hkill.
   revert Hkill Hsteps. clear. intros [Hkilled Hsuspended].
   induction 1; subst.
-  
+
   intros. inv H.
   intros. inv H.
   revert H0 Hkilled Hsuspended; clear; intros. intro.
@@ -454,7 +454,7 @@ Proof.
   { eapply RingCanceller_no_further_msg_once_suspended; eauto. }
   (* TradeDelegate *)
   { eapply TradeDelegate_no_further_transaction_msg_once_suspended; eauto. }
-  
+
   eapply kill_inv in H0; eauto. eapply IHHsteps; intuition.
 Qed.
 
@@ -481,8 +481,8 @@ Proof.
   { eapply kill_inv in H0; eauto.
     eapply IHHsteps; intuition. }
 Qed.
-    
-                                                              
+
+
 (** * Only owner (of TradeDelegate) is able to suspend/resume/kill LPSC *)
 Lemma TradeDelegate_ControlMsg_sender_is_owner:
   forall wst msg wst' retval events,
@@ -521,7 +521,7 @@ Proof.
     intros. simpl. rewrite IHparams. auto. }
   exfalso. eapply Hnotkill. eauto.
 Qed.
-  
+
 Lemma owner_not_changed_if_not_killed:
   forall wst msg wst' retval events,
     lr_step wst msg wst' retval events ->
@@ -616,7 +616,7 @@ Proof.
   intros. intro. eapply H2. right. eauto.
   auto.
 Qed.
-  
+
 (** * Only authorized users are able to fill/cancel orders *)
 (** TODO: Should these properties characterized by msg traces instead? *)
 Theorem only_authorized_contracts_are_able_to_fill_or_cancel_orders:
