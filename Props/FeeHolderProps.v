@@ -102,6 +102,9 @@ Section WithdrawTokenReqNoAuth.
     forall sender token amount wst wst' retval events,
       lr_step wst (MsgFeeHolder (msg_withdrawToken sender token amount))
               wst' retval events ->
+      (transfer_preserve_feebalance wst token sender sender amount ->
+       get_feebalance wst' token sender =
+       get_feebalance wst token sender - amount) /\
       retval = RetBool true /\
       In (EvtTokenWithdrawn sender token amount) events.
   Proof.
@@ -112,11 +115,21 @@ Section WithdrawTokenReqNoAuth.
     destruct Hreq as [Hamount Htransfer].
     destruct Htransfer as [wst'' [events' Htransfer]].
 
-    split.
-    - specialize (Htrans wst'' events' Htransfer).
-      destruct Htrans as [Hwst' Hretval].
-      auto.
-    - specialize (Hevents wst'' events' Htransfer).
+    specialize (Htrans wst'' events' Htransfer).
+    destruct Htrans as [Hwst' Hretval].
+    subst wst''; subst retval.
+
+    split; auto.
+    - intros Hpreserve.
+      specialize (Hpreserve wst' events' Htransfer).
+      unfold get_feebalance in *; simpl in *.
+      rewrite <- Hpreserve.
+      unfold AA2V_upd_dec; simpl.
+      rewrite AA2V.get_upd_eq; auto.
+      rewrite (minus_safe _ _ Hamount); auto.
+
+    - split; auto.
+      specialize (Hevents wst' events' Htransfer).
       rewrite Hevents.
       apply in_or_app; right.
       constructor; auto.
