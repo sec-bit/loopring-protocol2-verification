@@ -29,6 +29,56 @@ Definition plus_with_overflow (lhs: value) (rhs: value) :=
 Definition minus_with_underflow (lhs: value) (rhs: value) :=
   if (Nat.ltb lhs rhs) then (lhs + MAX_UINT256 + 1 - rhs) else (lhs - rhs).
 
+Lemma plus_safe_lt : forall (x: value) (y: value),
+    x <= MAX_UINT256 - y -> plus_with_overflow x y = x + y.
+Proof.
+  intros.
+  unfold plus_with_overflow.
+  rewrite Nat.ltb_antisym.
+  rewrite (proj2 (Nat.leb_le _ _) H).
+  reflexivity.
+Qed.
+
+Lemma plus_safe_lhs0 : forall (x: value) (y: value),
+    x = 0 -> plus_with_overflow x y = x + y.
+Proof.
+  intros.
+  unfold plus_with_overflow.
+  subst.
+  reflexivity.
+Qed.
+
+Lemma plus_safe_rhs0 : forall (x: value) (y: value),
+    y = 0 -> plus_with_overflow x y = x + y.
+Proof.
+  intros.
+  unfold plus_with_overflow.
+  subst. simpl.
+  rewrite Nat.add_0_r.
+  destruct (MAX_UINT256 - 0 <? x); reflexivity.
+Qed.
+
+Lemma minus_safe : forall (x: value) (y: value),
+    x >= y -> minus_with_underflow x y = x - y.
+Proof.
+  intros.
+  unfold minus_with_underflow.
+  rewrite Nat.ltb_antisym.
+  rewrite (proj2 (Nat.leb_le _ _) H).
+  reflexivity.
+Qed.
+
+Lemma minus_plus_safe: forall (x y : value),
+    x <= MAX_UINT256 -> x >= y -> plus_with_overflow (minus_with_underflow x y) y = x.
+Proof.
+  intros x y Hhi Hlo.
+  rewrite (minus_safe _ _ Hlo).
+  assert (y <= x). auto with arith.
+  assert (x - y <= MAX_UINT256 - y). omega.
+  rewrite (plus_safe_lt _ _ H0).
+  omega.
+Qed.
+
 
 (** Key pair *)
 
