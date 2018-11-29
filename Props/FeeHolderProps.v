@@ -39,26 +39,28 @@ End WithdrawBurnedReqAuth.
 
 Section WithdrawTokenReqNoAuth.
 
-  Theorem withdrawToken_req_noauth:
-    forall sender wst,
-      ~ FeeHolder.is_authorized wst sender ->
-      forall token amount wst' retval events,
-        lr_step wst (MsgFeeHolder (msg_withdrawToken sender token amount))
-                wst' retval events ->
-        In (EvtTokenWithdrawn sender token amount) events.
+  Theorem withdrawToken_noauth:
+    forall sender token amount wst wst' retval events,
+      lr_step wst (MsgFeeHolder (msg_withdrawToken sender token amount))
+              wst' retval events ->
+      retval = RetBool true /\
+      In (EvtTokenWithdrawn sender token amount) events.
   Proof.
-    intros sender wst Hsender_noauth.
     intros until events; intros Hstep.
 
-    destruct Hstep as [Hreq [_ Hevents]];
-      simpl in Hreq, Hevents.
-    destruct Hreq as [Hamount [wst'' [events' Htransfer]]].
+    destruct Hstep as [Hreq [Htrans Hevents]];
+      simpl in Hreq, Htrans, Hevents.
+    destruct Hreq as [Hamount Htransfer].
+    destruct Htransfer as [wst'' [events' Htransfer]].
 
-    specialize (Hevents wst'' events' Htransfer).
-    rewrite Hevents.
-
-    apply in_or_app; right.
-    constructor; auto.
+    split.
+    - specialize (Htrans wst'' events' Htransfer).
+      destruct Htrans as [Hwst' Hretval].
+      auto.
+    - specialize (Hevents wst'' events' Htransfer).
+      rewrite Hevents.
+      apply in_or_app; right.
+      constructor; auto.
   Qed.
 
 End WithdrawTokenReqNoAuth.
