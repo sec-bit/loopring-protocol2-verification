@@ -18,7 +18,7 @@ Require Import
 
 Section WithdrawBurnedReqAuth.
 
-  Theorem withdrawBurn_req_auth:
+  Theorem withdrawBurn_noauth:
     forall sender wst,
       ~ FeeHolder.is_authorized wst sender ->
       forall token amount,
@@ -32,6 +32,36 @@ Section WithdrawBurnedReqAuth.
     destruct Hstep as [Hreq _]; simpl in Hreq.
     destruct Hreq as [_ Hauth].
     congruence.
+  Qed.
+
+  Definition get_feebalance (wst: WorldState) (token owner: address) : uint :=
+    AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
+             (token, owner).
+
+  Theorem withdrawBurned_auth:
+    forall sender wst,
+      FeeHolder.is_authorized wst sender ->
+      forall token amount wst' retval events,
+        lr_step wst (MsgFeeHolder (msg_withdrawBurned sender token amount))
+                wst' retval events ->
+        retval = RetBool true /\
+        In (EvtTokenWithdrawn (wst_feeholder_addr wst) token amount) events.
+  Proof.
+    intros sender wst Hauth; intros until events; intros Hstep.
+
+    destruct Hstep as [Hreq [Htrans Hevents]];
+      simpl in Hreq, Htrans, Hevents.
+    destruct Hreq as [[Hamount Htransfer] _].
+    destruct Htransfer as [wst'' [events' Htransfer]].
+
+    split.
+    - specialize (Htrans wst'' events' Htransfer).
+      destruct Htrans as [Hwst' Hretval].
+      auto.
+    - specialize (Hevents wst'' events' Htransfer).
+      rewrite Hevents.
+      apply in_or_app; right.
+      constructor; auto.
   Qed.
 
 End WithdrawBurnedReqAuth.
