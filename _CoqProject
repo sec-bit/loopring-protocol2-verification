@@ -21,6 +21,7 @@ Messages.v
 States.v
 Types.v
 
+Props/FeeHolderProps.v
 Props/RingCancellerProps.v
 Props/RingSubmitterProps.v
 Props/TopProps.v

@@ -8,6 +8,7 @@ Require Import
         Types.
 
 Require Import
+        FeeHolder
         TopModel.
 
 Ltac inv H := inversion H; subst; simpl in *; clear H.
@@ -254,36 +255,48 @@ Proof.
   intros wst msg wst' retval events Hstep.
   destruct msg eqn:Hmsg; destruct Hstep as [Hrequire [Htrans _]];
     simpl in *.
-  { inv Hrequire. inv Htrans. intuition.
-    match goal with
-    | [ H1: forall x y, ?P x y -> _,
-          H2: exists w v, ?P w v |- _ ] =>
-      destruct H2 as (?&?&H2); specialize (H1 _ _ H2); subst
-    end.
-    unfold FeeHolder.FeeHolder.transfer_withdraw in *.
-    specialize (H3 RetNone). apply ERC20s_do_not_modify_TradeDelegate_state in H3.
-    rewrite H3.
-    unfold FeeHolder.FeeHolder.wst_before_transfer. simpl. auto. }
-  { inv Hrequire; inv Htrans. intuition.
-    match goal with
-    | [ H1: forall x y, ?P x y -> _,
-          H2: exists w v, ?P w v |- _ ] =>
-      destruct H2 as (?&?&H2); specialize (H1 _ _ H2); subst
-    end.
-    unfold FeeHolder.FeeHolder.transfer_withdraw in *.
-    specialize (H3 RetNone). apply ERC20s_do_not_modify_TradeDelegate_state in H3.
-    rewrite H3.
-    unfold FeeHolder.FeeHolder.wst_before_transfer. simpl. auto. }
-  { inv Hrequire; inv Htrans. intuition.
-    destruct H as (events' & retval' & Hstep & Hret).
-    eapply TradeDelegate_view_msg_state_unchanged in Hstep; eauto.
+
+  {
+    destruct Hrequire as [[Hvalue Htransfer] Hauth].
+    destruct Htransfer as [wst'' [events' Hcall]].
+
+    specialize (Htrans wst'' events' Hcall).
+    destruct Htrans as [Hwst' Hretval].
+    subst wst'; subst retval.
+
+    unfold FeeHolder.transfer_withdraw_succeed in Hcall.
+    apply ERC20s_do_not_modify_TradeDelegate_state in Hcall.
+    rewrite Hcall; simpl; auto.
+  }
+
+  {
+    destruct Hrequire as [Hvalue Htransfer].
+    destruct Htransfer as [wst'' [events' Hcall]].
+
+    specialize (Htrans wst'' events' Hcall).
+    destruct Htrans as [Hwst' Hretval].
+    subst wst'; subst retval.
+
+    unfold FeeHolder.transfer_withdraw_succeed in Hcall.
+    apply ERC20s_do_not_modify_TradeDelegate_state in Hcall.
+    rewrite Hcall; simpl; auto.
+  }
+
+  {
+    destruct Hrequire as [wst0 [events0 Hcall0]].
+
+    destruct Htrans as [Hretval Hwst'].
+    subst retval; subst wst'.
+
+    eapply TradeDelegate_view_msg_state_unchanged in Hcall0; eauto.
     subst. clear. revert wst. induction params; auto.
     intro. simpl.
     rewrite (IHparams (FeeHolder.FeeHolder.wst_add_fee
                          wst (feeblncs_token a)
                          (feeblncs_owner a)
                          (feeblncs_value a))).
-    simpl; auto. }
+    simpl; auto.
+  }
 Qed.
 
 Lemma always_suspended_if_not_resumed:
