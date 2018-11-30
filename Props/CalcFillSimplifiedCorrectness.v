@@ -93,8 +93,28 @@ Section Correctness.
   Definition mult_gamma (product: Q) (order: Order) : Q :=
     product * inject_Z (Z.of_nat (amountS order)) / inject_Z (Z.of_nat (amountB order)).
 
-  Definition PreConditionGamma (orderring : Ring) : Prop :=
-    fold_left mult_gamma orderring 1 >= 1.
+  Definition mult_gamma_nat (product: nat) (order: Order) : nat :=
+    (product * (amountS order) %/ (amountB order))%nat.
+  
+  Definition fillB_mult_gamma (fillB: nat) (r: Ring) : nat :=
+    fold_left mult_gamma_nat r fillB.
+
+  Definition PreConditionGamma (r : Ring) : Prop := 
+    forall  o r1,
+      shrink_ring r = Some (o :: r1) ->
+      let last' := shrink_order (last r1 o ) o in
+      (fillB last' <= fillB_mult_gamma (fillB last') r)%nat.
+
+  Lemma pre_condition_gamma_implies:
+    forall r,
+      PreConditionGamma r ->
+      forall  o o0 r1,
+        shrink_ring r = Some (o :: o0 :: r1) ->
+        let last' := shrink_order (last (o0 :: r1) o ) o in
+        (fillB last' <=
+         fillB_mult_gamma (fillB last') r)%nat.
+  Proof. auto. Qed.
+
 
   Definition PreConditionLength (orderring : Ring ) : Prop :=
     (length orderring >= 2)%nat.
@@ -388,6 +408,7 @@ Section Correctness.
     end.
   Qed.
     
+  (* 
   Lemma PreConditionGamma_stable_wrt_shrink:
     forall r r',
       shrink_ring r = Some r' ->
@@ -403,13 +424,26 @@ Section Correctness.
       eapply IHr in H4. eauto. }
     rewrite H1 in H0. auto.
   Qed.
-
-  (** post condition of shrink pass 2 *)
-  Definition mult_gamma_nat (product: nat) (order: Order) : nat :=
-    (product * (amountS order) %/ (amountB order))%nat.
+  *)
   
-  Definition fillB_mult_gamma (fillB: nat) (r: Ring) : nat :=
-    fold_left mult_gamma_nat r fillB.
+  (** post condition of shrink pass 2 *)
+  Lemma fillB_mult_gamma_shrink_canc:
+    forall r n r',
+      shrink_ring r = Some r' ->
+      fillB_mult_gamma n r' = fillB_mult_gamma n r.
+  Proof.
+    intros. apply rate_unchanged_after_shrinking_ring in H.
+    revert n. induction H. auto.
+    simpl. intro n. rewrite IHForall2. inv H.
+    unfold mult_gamma_nat. rewrite H1, H2. auto.
+  Qed.
+  
+  Lemma fillB_mult_gamma_shrink_order_canc:
+    forall r o n o',
+      fillB_mult_gamma n (shrink_order o' o :: r) = fillB_mult_gamma n (o :: r).
+  Proof.
+    intros. unfold shrink_order. destruct (fillS o' < fillB o)%nat; simpl; auto.
+  Qed.
 
   Lemma mult_gamma_nat_shrink_order_canc:
     forall o o' amount, 
@@ -448,19 +482,6 @@ Section Correctness.
     intros. destruct (@leP a b); destruct (@leP (S b) a); try discriminate; auto.
     omega.
   Qed.
-
-  (** Impossible to prove, need a stronger precondition on gammas *)
-  Lemma precondition_gamma_mult_gamma_ge:
-    forall r n,
-      PreConditionGamma r ->
-      (n <= fillB_mult_gamma n r)%nat.
-  Proof.
-    unfold PreConditionGamma, fillB_mult_gamma.
-    generalize 1. intros q r n. revert q n.
-    induction r.
-    simpl. auto.
-    simpl. intros.
-  Admitted.
 
   Lemma almost_can_fill_tail':
     forall olast a r,
@@ -549,23 +570,6 @@ Section Correctness.
     apply almost_can_fill_shrinking_unchanged in H0; auto. subst r'. auto.
   Qed.
 
-  Lemma post_condition_check_must_succeed:
-    forall olast' r',
-      PreConditionGamma (olast' :: r') ->
-      (fillS (last r' olast') =
-       fillB_mult_gamma ((fillB olast') * (amountS olast') %/ (amountB olast')) r')%nat ->
-      r' <> nil ->
-      check_last_can_fill (olast' :: r') = true.
-  Proof.
-    intros.
-    assert (fillB_mult_gamma ((fillB olast' * amountS olast') %/ amountB olast') r' =
-            fillB_mult_gamma (fillB olast') (olast' :: r')) by auto.
-    rewrite H2 in H0. clear H2.
-    unfold check_last_can_fill. rewrite H0. clear H0.
-    destruct r'. contradiction. clear H1.
-    apply precondition_gamma_mult_gamma_ge. auto.
-  Qed.
-  
   Lemma mult_gamma_eq_wrt_shrink_order:
     forall a o o',
       mult_gamma a o = mult_gamma a (shrink_order o' o).
@@ -585,8 +589,8 @@ Section Correctness.
     destruct (shrink_ring r) as [r1|] eqn:Hshrink1; [|discriminate].
     pose proof (almost_can_fill_after_shrinking _ _ Hshrink1) as Hcanfill1.
     pose proof (winwin_stable_wrt_shrink _ _ Hshrink1 Hwinwin) as Hwinwin1.
-    pose proof (PreConditionGamma_stable_wrt_shrink _ _ Hshrink1 Hgamma) as Hgamma1.
-    clear Hwinwin Hgamma Hshrink1 r.
+    (* pose proof (PreConditionGamma_stable_wrt_shrink _ _ Hshrink1 Hgamma) as Hgamma1. *)
+    clear Hwinwin.
     destruct r1; [discriminate|].
     destruct r1; [discriminate|].
     destruct (check_last_can_fill (o :: o0 :: r1)) eqn:Hcheck1.
@@ -612,27 +616,26 @@ Section Correctness.
     { clear. revert o0 o. induction r1; auto. intros. simpl in *. apply IHr1. }
     rewrite <- H. apply lt_false_le. auto.
     (* case 2: check failed till the end *)
-    eapply post_condition_check_must_succeed; eauto.
-    { eapply PreConditionGamma_stable_wrt_shrink; eauto.
-      revert Hgamma1. clear.
-      unfold PreConditionGamma.
-      assert (fold_left mult_gamma (o :: o0 :: r1) 1 =
-              fold_left mult_gamma (shrink_order (last (o0 :: r1) o) o :: o0 :: r1) 1).
-      simpl. erewrite (mult_gamma_eq_wrt_shrink_order 1 o _). eauto.
-      rewrite H. auto.
-    }
-    { rewrite H. f_equal.
-      unfold shrink_order.
-      unfold check_last_can_fill in Hcheck1.
-      destruct (fillS _ < fillB o)%nat eqn:Hlt.
-      simpl. auto.
+    eapply pre_condition_gamma_implies in Hgamma; [|exact Hshrink1].
+    unfold check_last_can_fill.
+    destruct r'. discriminate.
+    rewrite H.
+    assert (fillB_mult_gamma (fillS (shrink_order (last (o0 :: r1) o) o)) (o1 :: r') =
+            fillB_mult_gamma (fillB (shrink_order (last (o0 :: r1) o) o))
+                             ((shrink_order (last (o0 :: r1) o ) o :: o1 :: r'))).
+    { unfold shrink_order. unfold check_last_can_fill in Hcheck1.
+      destruct (fillS (last (o0 :: r1) o) < fillB o)%nat eqn:Hlt. auto.
       exfalso. revert Hcheck1 Hlt. clear.
       generalize (fillB o) (fillS (last (o0 :: r1) o)). clear. intros m n A B.
       destruct (@leP m n); try discriminate.
       destruct (@leP (S n) m); try discriminate.
       omega.
     }
-    intro. destruct r'; discriminate.
+    rewrite H0.
+    erewrite fillB_mult_gamma_shrink_canc; [|exact Hshrink2].
+    rewrite fillB_mult_gamma_shrink_order_canc.
+    erewrite fillB_mult_gamma_shrink_canc; [|exact Hshrink1].
+    auto.
   Qed.
 
   Theorem completeness:
