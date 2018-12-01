@@ -1181,21 +1181,40 @@ Module RingSubmitter.
         | order :: orders' => make_order_param order :: make_order_params orders'
         end.
 
+      Definition participation_preserve (p p': Participation) : Prop :=
+        part_order_idx p = part_order_idx p'.
+
+      Definition participations_preserve (r r': RingRuntimeState) : Prop :=
+        length (ring_rt_participations r) = length (ring_rt_participations r') /\
+        forall n p,
+          nth_error (ring_rt_participations r) n = Some p ->
+          exists p',
+            nth_error (ring_rt_participations r') n = Some p' /\
+            part_order_idx p = part_order_idx p'.
+
       Definition rings_preserve (st st': RingSubmitterRuntimeState) : Prop :=
         forall n,
           (forall r,
               nth_error (submitter_rt_rings st) n = Some r ->
               exists r',
                 nth_error (submitter_rt_rings st') n = Some r' /\
-                ring_rt_static r' = ring_rt_static r) /\
+                ring_rt_static r' = ring_rt_static r /\
+                participations_preserve r r') /\
           (nth_error (submitter_rt_rings st) n = None ->
            nth_error (submitter_rt_rings st') n = None).
+
+      Definition order_preserve (ord ord': OrderRuntimeState) : Prop :=
+        let order := ord_rt_order ord in
+        let order' := ord_rt_order ord' in
+        order_tokenS order = order_tokenS order' /\
+        order_tokenB order = order_tokenB order'.
 
       Definition orders_preserve (st st': RingSubmitterRuntimeState) : Prop :=
         forall n,
           (forall ord,
               nth_error (submitter_rt_orders st) n = Some ord ->
-              exists ord', nth_error (submitter_rt_orders st') n = Some ord') /\
+              exists ord', nth_error (submitter_rt_orders st') n = Some ord' /\
+                      order_preserve ord ord') /\
           (nth_error (submitter_rt_orders st) n = None ->
            nth_error (submitter_rt_orders st') n = None).
 
@@ -1250,6 +1269,49 @@ Module RingSubmitter.
           nth_ring_mth_order_cancelled wst' (submitter_rt_rings st') (submitter_rt_orders st') n m.
 
     End Cancellation.
+
+    Section TokenMismatch.
+
+      Definition prev_ps
+                 (r: RingRuntimeState) (n: nat)
+      : option Participation :=
+        let ps := ring_rt_participations r in
+        match nth_error ps n with
+        | None => None
+        | Some _ => match n with
+                   | O => nth_error ps (length ps - 1)
+                   | S n' => nth_error ps n'
+                   end
+        end.
+
+      Definition prev_ord
+                 (r: RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+                 (n: nat)
+        : option OrderRuntimeState :=
+        match prev_ps r n with
+        | None => None
+        | Some p => nth_error orders (part_order_idx p)
+        end.
+
+      Definition has_token_mismatch_ords
+                 (r: RingRuntimeState)
+                 (orders: list OrderRuntimeState)
+        : Prop :=
+        exists idx ord p_ord,
+          nth_error orders idx = Some ord /\
+          prev_ord r orders idx = Some p_ord /\
+          order_tokenS (ord_rt_order ord) <>
+          order_tokenB (ord_rt_order p_ord).
+
+      Definition nth_ring_has_token_mismatch_orders
+                 (st: RingSubmitterRuntimeState) (n: nat)
+        : Prop :=
+        exists r,
+          nth_error (submitter_rt_rings st) n = Some r /\
+          has_token_mismatch_ords r (submitter_rt_orders st).
+
+    End TokenMismatch.
 
     Definition st_preserve (st st': RingSubmitterRuntimeState) : Prop :=
       rings_preserve st st' /\
@@ -3063,6 +3125,11 @@ Module RingSubmitter.
               (forall n m r,
                   nth_ring_mth_order_cancelled
                     wst (submitter_rt_rings st) (submitter_rt_orders st) n m ->
+                  nth_error (submitter_rt_rings st) n = Some r ->
+                  In (EvtRingSkipped (ring_rt_static r)) events
+              ) /\
+              (forall n r,
+                  nth_ring_has_token_mismatch_orders st n ->
                   nth_error (submitter_rt_rings st) n = Some r ->
                   In (EvtRingSkipped (ring_rt_static r)) events
               ) /\
