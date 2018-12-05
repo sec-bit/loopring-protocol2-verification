@@ -122,6 +122,22 @@ Axiom ERC20s_do_not_modify_TradeDelegate_state:
     ERC20.ERC20s.model wst msg wst' retval events ->
     wst_trade_delegate_state wst' = wst_trade_delegate_state wst.
 
+(** * BrokerInterceptor Axioms *)
+Axiom broker_interceptor_does_not_change_trade_delegate_state:
+  forall wst msg wst' retval events,
+    lr_step wst (MsgBrokerInterceptor msg) wst' retval events ->
+    wst_trade_delegate_state wst' = wst_trade_delegate_state wst.
+
+(** * RingSubmitter Axioms *)
+Axiom RingSubmitter_no_further_msg_once_suspended:
+  forall wst msg wst' retval events,
+    delegate_suspended (wst_trade_delegate_state wst) = true ->
+    ~ RingSubmitter.RingSubmitter.model wst msg wst' retval events.
+
+Axiom RingSubmitter_does_not_change_trade_delegate_owner:
+  forall wst msg wst' retval events,
+    lr_step wst (MsgRingSubmitter msg) wst' retval events ->
+    delegate_owner (wst_trade_delegate_state wst') = delegate_owner (wst_trade_delegate_state wst).
 
 (** * Lemmas *)
 Lemma lr_steps_partition:
@@ -203,13 +219,6 @@ Proof.
            end;
     try congruence.
 Qed.
-
-Lemma RingSubmitter_no_further_msg_once_suspended:
-  forall wst msg wst' retval events,
-    delegate_suspended (wst_trade_delegate_state wst) = true ->
-    ~ RingSubmitter.RingSubmitter.model wst msg wst' retval events.
-Proof.
-Admitted.
 
 Lemma RingCanceller_no_further_msg_once_suspended:
   forall wst msg wst' retval events,
@@ -333,9 +342,18 @@ Proof.
     unfold BurnRateTable.upgradetier in H3. simpl in H3. inv H3.
     erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
   { (* BrokerInterceptor *)
-    admit.
+    erewrite broker_interceptor_does_not_change_trade_delegate_state; eauto.
   }
-Admitted.
+  { (* BurnManager *)
+    destruct H0 as [Hrequire [Htrans _]].
+    destruct msg; simpl in *. clear H1. destruct Htrans as (events' & A & B & C & D & E).
+    simpl in E. intuition. subst.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; try eexact H2.
+    erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto. }
+  { (* OrderBook *)
+    destruct H0 as [Hrequire [Htrans _]].
+    destruct msg; simpl in *; intuition; subst; intuition. }
+Qed.
 
 Theorem no_further_LPSC_transaction_once_suspended:
   forall msgs owner msgs' events wst' retval,
@@ -439,9 +457,18 @@ Proof.
     destruct msg; inv Htrans; simpl in *; subst; try (intuition; fail).
     inv H1. erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
   { (* BrokerInterceptor *)
-    admit.
+    erewrite broker_interceptor_does_not_change_trade_delegate_state; eauto.
   }
-Admitted.
+  { (* BurnManager *)
+    destruct Hstep as [Hrequire [Htrans _]].
+    destruct msg; simpl in *. destruct Htrans as (events' & A & B & C & D & E).
+    simpl in E. destruct E. destruct H0. destruct H1 as (F & G & I). subst.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; try eexact H0.
+    erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto. }
+  { (* OrderBook *)
+    destruct Hstep as [Hrequire [Htrans _]].
+    destruct msg; simpl in *; intuition; subst; intuition. }
+Qed.
 
 Theorem no_further_LPSC_transaction_once_killed:
   forall msgs owner msgs' events wst' retval,
@@ -546,7 +573,7 @@ Proof.
   destruct msg.
   { (* RingSubmitter *)
     clear Hnotkill.
-    admit.
+    eapply RingSubmitter_does_not_change_trade_delegate_owner; eauto.
   }
   { (* RingCanceller *)
     clear Hnotkill.
@@ -603,8 +630,17 @@ Proof.
     inv H1.
     erewrite ERC20s_do_not_modify_TradeDelegate_state; eauto. }
   { (* BrokerInterceptor *)
-    admit. }
-Admitted.
+    erewrite broker_interceptor_does_not_change_trade_delegate_state; eauto. }
+  { (* BurnManager *)
+    destruct Hstep as [Hrequire [Htrans _]].
+    destruct msg; simpl in *. destruct Htrans as (events' & A & B & C & D & E).
+    simpl in E. destruct E. destruct H0. destruct H1 as (F & G & I). subst.
+    erewrite ERC20s_do_not_modify_TradeDelegate_state; try eexact H0.
+    erewrite FeeHolder_does_not_modify_trade_delegate_state; eauto. }
+  { (* OrderBook *)
+    destruct Hstep as [Hrequire [Htrans _]].
+    destruct msg; simpl in *; intuition; subst; intuition. }
+Qed.  
 
 Theorem only_owner_is_able_to_control_LPSC:
   forall msgs wst' retval events,
