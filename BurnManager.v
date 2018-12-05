@@ -23,10 +23,10 @@ Module BurnManager.
 
     Definition burn_trans (wst: WorldState) (token: address)
                (wst': WorldState) (retval: RetVal) (events: list Event) : Prop :=
-      forall balance sender wst1 events1 wst2 events2,
-        balance = AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
-                           (token, burnMgr_feeHolderAddress (wst_burn_manager_state wst)) /\
-        sender = wst_burn_manager_addr wst /\
+      exists wst1 events1 wst2 events2,
+        let balance := AA2V.get (feeholder_feeBalances (wst_feeholder_state wst))
+                                (token, burnMgr_feeHolderAddress (wst_burn_manager_state wst)) in
+        let sender := wst_burn_manager_addr wst in
         FeeHolder.model wst (msg_withdrawBurned sender token balance)
                         wst1 (RetBool true) events1 /\
         ERC20s.model wst1 (msg_erc20_burn sender token balance)
@@ -43,15 +43,13 @@ Module BurnManager.
 
         fspec_trans :=
           fun wst wst' retval =>
-            forall wst'' retval'' events,
-              burn_trans wst token wst'' retval'' events ->
-              wst' = wst'' /\ retval = retval'';
+           exists events,
+             burn_trans wst token wst' retval events;
 
         fspec_events :=
           fun wst events =>
-            forall wst' retval events',
-              burn_trans wst token wst' retval events' ->
-              events = events';
+            exists wst' retval,
+              burn_trans wst token wst' retval events;
       |}.
 
   End Burn.
