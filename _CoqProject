@@ -22,6 +22,7 @@ States.v
 Types.v
 
 Props/FeeHolderProps.v
+Props/BurnManagerProps.v
 Props/RingCancellerProps.v
 Props/RingSubmitterProps.v
 Props/TopProps.v
