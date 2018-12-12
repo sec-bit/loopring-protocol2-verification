@@ -1,25 +1,26 @@
 -R . LPSCModel
 
-TopModel.v
+Models/TopModel.v
 
-BrokerInterceptor.v
-BrokerRegistry.v
-ERC20.v
-FeeHolder.v
-OrderBook.v
-OrderRegistry.v
-RingCanceller.v
-RingSubmitter.v
-TradeDelegate.v
-BurnManager.v
-BurnRateTable.v
+Models/BrokerInterceptor.v
+Models/BrokerRegistry.v
+Models/ERC20.v
+Models/FeeHolder.v
+Models/OrderBook.v
+Models/OrderRegistry.v
+Models/RingCanceller.v
+Models/RingSubmitter.v
+Models/TradeDelegate.v
+Models/BurnManager.v
+Models/BurnRateTable.v
 
-Events.v
-LibModel.v
-Maps.v
-Messages.v
-States.v
-Types.v
+Models/Events.v
+Models/Messages.v
+Models/States.v
+
+Libs/LibModel.v
+Libs/Maps.v
+Libs/Types.v
 
 Props/FeeHolderProps.v
 Props/BurnManagerProps.v
