@@ -22,9 +22,9 @@ Libs/LibModel.v
 Libs/Maps.v
 Libs/Types.v
 
-Props/FeeHolderProps.v
 Props/BurnManagerProps.v
+Props/ControlProps.v
+Props/FeeHolderProps.v
+Props/FilledRingProps.v
 Props/RingCancellerProps.v
 Props/RingSubmitterProps.v
-Props/TopProps.v
-Props/CalcFillSimplifiedCorrectness.v
