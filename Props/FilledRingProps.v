@@ -408,24 +408,6 @@ Section Correctness.
     end.
   Qed.
     
-  (* 
-  Lemma PreConditionGamma_stable_wrt_shrink:
-    forall r r',
-      shrink_ring r = Some r' ->
-      PreConditionGamma r ->
-      PreConditionGamma r'.
-  Proof.
-    unfold PreConditionGamma.
-    intros. apply rate_unchanged_after_shrinking_ring in H.
-    assert (fold_left mult_gamma r 1 = fold_left mult_gamma r' 1).
-    { revert r' H. clear. generalize 1. induction r; intros.
-      inv H. auto.
-      inv H. inv H2. unfold mult_gamma. rewrite H, H0.
-      eapply IHr in H4. eauto. }
-    rewrite H1 in H0. auto.
-  Qed.
-  *)
-  
   (** post condition of shrink pass 2 *)
   Lemma fillB_mult_gamma_shrink_canc:
     forall r n r',
