@@ -269,7 +269,7 @@ Module TradeDelegate.
                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
                        delegate_filled := delegate_filled st;
                        delegate_cancelled := delegate_cancelled st;
-                       delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff; (*TODO check this line*)
+                       delegate_cutoffs := A2V.upd (delegate_cutoffs st) (broker) cutoff;
                        delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
                        delegate_cutoffsOwner := delegate_cutoffsOwner st;
                        delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
@@ -306,7 +306,7 @@ Module TradeDelegate.
                        delegate_filled := delegate_filled st;
                        delegate_cancelled := delegate_cancelled st;
                        delegate_cutoffs := delegate_cutoffs st;
-                       delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff; (*TODO check this line*)
+                       delegate_tradingPairCutoffs := AH2V.upd (delegate_tradingPairCutoffs st) (broker, tokenPair) cutoff;
                        delegate_cutoffsOwner := delegate_cutoffsOwner st;
                        delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
                      |} /\
@@ -343,7 +343,7 @@ Module TradeDelegate.
                        delegate_cancelled := delegate_cancelled st;
                        delegate_cutoffs := delegate_cutoffs st;
                        delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
-                       delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff; (*TODO check this line*)
+                       delegate_cutoffsOwner := AA2V.upd (delegate_cutoffsOwner st) (broker, owner) cutoff;
                        delegate_tradingPairCutoffsOwner := delegate_tradingPairCutoffsOwner st;
                      |} /\
             retval = RetNone;
@@ -380,7 +380,7 @@ Module TradeDelegate.
                        delegate_cutoffs := delegate_cutoffs st;
                        delegate_tradingPairCutoffs := delegate_tradingPairCutoffs st;
                        delegate_cutoffsOwner := delegate_cutoffsOwner st;
-                       delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff; (*TODO check this line*)
+                       delegate_tradingPairCutoffsOwner := AAH2V.upd (delegate_tradingPairCutoffsOwner st) (broker, owner, tokenPair) cutoff;
                      |} /\
             retval = RetNone;
 
@@ -458,7 +458,7 @@ Module TradeDelegate.
                      wst
                      {|
                        delegate_owner := delegate_owner st;
-                       delegate_suspended := true; (*TODO 如何更新一个值 使用upd?*)
+                       delegate_suspended := true;
                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
                        delegate_filled := delegate_filled st;
                        delegate_cancelled :=delegate_cancelled st;
@@ -479,7 +479,6 @@ Module TradeDelegate.
   Section Resume.
 
     Definition resume_spec (sender: address) :=
-      (* TODO: to be defined *)
       {|
         fspec_require :=
           fun wst =>
@@ -493,7 +492,7 @@ Module TradeDelegate.
                      wst
                      {|
                        delegate_owner := delegate_owner st;
-                       delegate_suspended := false; (*TODO 如何更新一个值 使用upd?*)
+                       delegate_suspended := false;
                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
                        delegate_filled := delegate_filled st;
                        delegate_cancelled :=delegate_cancelled st;
@@ -526,7 +525,7 @@ Module TradeDelegate.
             wst' = wst_update_trade_delegate
                      wst
                      {|
-                       delegate_owner := 0; (*TODO upd?*)
+                       delegate_owner := 0;
                        delegate_suspended := delegate_suspended st;
                        delegate_authorizedAddresses := delegate_authorizedAddresses st;
                        delegate_filled := delegate_filled st;
@@ -541,7 +540,7 @@ Module TradeDelegate.
         fspec_events :=
           fun wst events =>
             let st := wst_trade_delegate_state wst in
-            events = (EvtOwnershipTransferred (delegate_owner st) 0) :: nil; (*TODO emit event?*)
+            events = (EvtOwnershipTransferred (delegate_owner st) 0) :: nil;
       |}.
 
   End Kill.

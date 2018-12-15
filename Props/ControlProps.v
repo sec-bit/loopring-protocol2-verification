@@ -640,7 +640,7 @@ Proof.
   { (* OrderBook *)
     destruct Hstep as [Hrequire [Htrans _]].
     destruct msg; simpl in *; intuition; subst; intuition. }
-Qed.  
+Qed.
 
 Theorem only_owner_is_able_to_control_LPSC:
   forall msgs wst' retval events,
@@ -667,7 +667,6 @@ Proof.
 Qed.
 
 (** * Only authorized users are able to fill/cancel orders *)
-(** TODO: Should these properties characterized by msg traces instead? *)
 Theorem only_authorized_contracts_are_able_to_fill_or_cancel_orders:
   forall wst msg wst' retval events,
     lr_step wst (MsgTradeDelegate msg) wst' retval events ->

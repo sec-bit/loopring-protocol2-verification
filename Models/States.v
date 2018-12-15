@@ -383,8 +383,6 @@ Record WorldState : Type :=
 
       (* state of the current block *)
       wst_block_state: BlockState;
-
-      (* TODO: add states of other LPSC contracts and ... *)
     }.
 
 Definition wst_update_trade_delegate

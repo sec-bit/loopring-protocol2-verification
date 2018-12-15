@@ -187,5 +187,4 @@ Inductive Message : Type :=
 | MsgBrokerInterceptor (msg: BrokerInterceptorMsg)
 | MsgBurnManager (msg: BurnManagerMsg)
 | MsgOrderBook (msg: OrderBookMsg)
-(* TODO: add messages of other LPSC contracts *)
 .

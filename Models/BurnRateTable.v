@@ -38,7 +38,7 @@ Parameter x10000 : uint.
 
 Parameter YEAR_TO_SECONDS : uint.
 
-(** Here I assumed the BurnRateTable is constructed using correct LRC and WETH addresses *)    
+(** Here I assumed the BurnRateTable is constructed using correct LRC and WETH addresses *)
 (* LRC address, WETH address *)
 Parameter lrcAddress : address.
 Parameter wethAddress : address.
@@ -61,7 +61,7 @@ Section getTokenTier_SPEC.
   Variable (sender: address).
   Variable (token: address).
 
-  (* function body: 
+  (* function body:
      function getTokenTier(
         address token
         )
@@ -81,7 +81,7 @@ Section getTokenTier_SPEC.
     if Nat.ltb data.(validUntil) (block_timestamp (wst_block_state wst))
     then TIER4
     else data.(tier).
-      
+
   Definition getTokenTier_require : WorldState -> Prop := fun _ => True.
 
   Inductive getTokenTier_trans : WorldState -> WorldState -> RetVal -> Prop :=
@@ -92,7 +92,7 @@ Section getTokenTier_SPEC.
 
   Definition getTokenTier_spec : FSpec :=
     mk_fspec getTokenTier_require getTokenTier_trans getTokenTier_events.
-  
+
 End getTokenTier_SPEC.
 
 
@@ -126,23 +126,23 @@ Section getBurnRate_SPEC.
     | O => BURN_P2P_TIER4 * x10000 + BURN_MATCHING_TIER4
     (* TIER 3 *)
     | S O => BURN_P2P_TIER3 * x10000 + BURN_MATCHING_TIER3
-    (* TIER 2 *)   
+    (* TIER 2 *)
     | S (S O) => BURN_P2P_TIER2 * x10000 + BURN_MATCHING_TIER2
     (* TIER 1 *)
     | S (S (S O)) => BURN_P2P_TIER1 * x10000 + BURN_MATCHING_TIER1
     (* other cases *)
     | _ => BURN_P2P_TIER4 * x10000 + BURN_MATCHING_TIER4
     end.
-  
+
   Definition getBurnRate_require : WorldState -> Prop := fun _ => True.
-  
+
   Inductive getBurnRate_trans : WorldState -> WorldState -> RetVal -> Prop :=
   | getBurnRateTrans: forall wst,
       getBurnRate_trans wst wst (RetUint (getRate (getTIER token wst))).
-  
+
   Inductive getBurnRate_events : WorldState -> list Event -> Prop :=
   | getBurnRateEvents: forall wst, getBurnRate_events wst nil.
-  
+
   Definition getBurnRate_spec : FSpec :=
     mk_fspec getBurnRate_require getBurnRate_trans getBurnRate_events.
 
@@ -150,10 +150,10 @@ End getBurnRate_SPEC.
 
 
 Section upgradeTokenTier_SPEC.
-  
+
   Variable (sender: address).
   Variable (token: address).
-  (* function body 
+  (* function body
      function upgradeTokenTier(
         address token
         )
@@ -198,21 +198,18 @@ Section upgradeTokenTier_SPEC.
     let data' := mk_token_data (data.(tier) + 1) (NOW + 2 * YEAR_TO_SECONDS) in
     let tokens' := TokenDataMap.upd tokens token data' in
     (set_state wst (mk_burn_rate_table_state tokens'), data.(tier) + 1) .
-                                 
+
   Definition upgradeTokenTier_require (wst: WorldState) : Prop :=
     exists totalSupply wst' evts,
       token <> 0
       /\ token <> lrcAddress
       /\ token <> wethAddress
       /\ getTIER token wst <> TIER1
-      (* TODO: should [sender] be the caller or transaction origin? *)
-      (* TODO: does totalSupply generate ERC20 event? *)
-      (* TODO: what's the return value of burnFrom? *)
       /\ ERC20s.model wst (msg_totalSupply sender lrcAddress)
                      wst (RetUint totalSupply) nil
       /\ ERC20s.model wst (msg_burnFrom (this wst) lrcAddress sender (burnamount totalSupply))
                      wst' (RetBool true) evts.
-  
+
   Inductive upgradeTokenTier_trans (wst : WorldState) : WorldState -> RetVal -> Prop :=
   | upgradeTokenTier_TRANS: forall totalSupply wst' evts TIER wst'' ,
       ERC20s.model wst (msg_totalSupply sender lrcAddress)
@@ -221,7 +218,7 @@ Section upgradeTokenTier_SPEC.
                    wst' (RetBool true) evts ->
       upgradetier wst' = (wst'', TIER) ->
       upgradeTokenTier_trans wst wst'' (RetBool true).
-      
+
   Inductive upgradeTokenTier_events (wst : WorldState) : list Event -> Prop :=
   | upgradeTokenTier_EVENTS: forall totalSupply wst' evts TIER wst'' ,
       ERC20s.model wst (msg_totalSupply sender lrcAddress)
@@ -230,7 +227,7 @@ Section upgradeTokenTier_SPEC.
                    wst' (RetBool true) evts ->
       upgradetier wst' = (wst'', TIER) ->
       upgradeTokenTier_events wst (evts ++ EvtTokenTierUpgraded token TIER :: nil).
-  
+
   Definition upgradeTokenTier_spec : FSpec :=
     mk_fspec upgradeTokenTier_require upgradeTokenTier_trans upgradeTokenTier_events.
 

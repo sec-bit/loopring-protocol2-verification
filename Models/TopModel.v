@@ -20,7 +20,6 @@ Require Import
         BurnRateTable.
 
 
-(* TODO: to be defined *)
 Parameter wst_init: WorldState.
 
 Definition lr_step

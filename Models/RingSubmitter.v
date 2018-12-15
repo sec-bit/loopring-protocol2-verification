@@ -162,7 +162,6 @@ Module RingSubmitter.
           submitter_rt_rings: list RingRuntimeState;
           submitter_rt_token_spendables: TokenSpendableMap.t;
           submitter_rt_broker_spendables: BrokerSpendableMap.t;
-          (* TODO: add necessary fields of Context *)
         }.
 
 

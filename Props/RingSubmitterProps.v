@@ -456,7 +456,7 @@ Section NoCancelledOrders.
     simpl. eapply IHn; eauto.
   Qed.
 
-  Theorem no_cancelled_orders_dealt:
+  Theorem no_cancelled_orders:
     forall sender rings orders mining n m r st wst wst' retval events,
       st = RingSubmitter.make_rt_submitter_state mining orders rings ->
       has_cancelled_order wst rings orders n m ->
