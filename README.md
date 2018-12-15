@@ -27,9 +27,11 @@ Then we define a list of correctness and security properties of LPSC on the form
 
 The machine state is defined by following files:
 
-- World State: [Models/States.v](./Models/States.v)
-- Message:     [Models/Messages.v](./Models/Messages.v)
-- Event:       [Models/Events.v](./Models/Events.v)
+| Component   | Coq File                                 |
+|:-----------:|------------------------------------------|
+| World State | [Models/States.v](./Models/States.v)     |
+| Message     | [Models/Messages.v](./Models/Messages.v) |
+| Event       | [Models/Events.v](./Models/Events.v)     |
 
 The top-level state transition is defined by:
 
@@ -37,16 +39,18 @@ The top-level state transition is defined by:
 
 The state transition is further defined per contract:
 
-- `BrokerInterceptor`: [Models/BrokerInterceptor.v](Models/BrokerInterceptor.v)
-- `BrokerRegistry`:    [Models/BrokerRegistry.v](Models/BrokerRegistry.v)
-- `BurnManager`:       [Models/BurnManager.v](Models/BurnManager.v)
-- `BurnRateTable`:     [Models/BurnRateTable.v](Models/BurnRateTable.v)
-- `FeeHolder`:         [Models/FeeHolder.v](Models/FeeHolder.v)
-- `OrderBook`:         [Models/OrderBook.v](Models/OrderBook.v)
-- `OrderRegistry`:     [Models/OrderRegistry.v](Models/OrderRegistry.v)
-- `RingCanceller`:     [Models/RingCanceller.v](Models/RingCanceller.v)
-- `RingSubmitter`:     [Models/RingSubmitter.v](Models/RingSubmitter.v)
-- `TradeDelegate`:     [Models/TradeDelegate.v](Models/TradeDelegate.v)
+| Contract            | Coq File                                                |
+|:-------------------:|---------------------------------------------------------|
+| `BrokerInterceptor` | [Models/BrokerInterceptor.v](Models/BrokerInterceptor.v)|
+| `BrokerRegistry`    | [Models/BrokerRegistry.v](Models/BrokerRegistry.v)      |
+| `BurnManager`       | [Models/BurnManager.v](Models/BurnManager.v)            |
+| `BurnRateTable`     | [Models/BurnRateTable.v](Models/BurnRateTable.v)        |
+| `FeeHolder`         | [Models/FeeHolder.v](Models/FeeHolder.v)                |
+| `OrderBook`         | [Models/OrderBook.v](Models/OrderBook.v)                |
+| `OrderRegistry`     | [Models/OrderRegistry.v](Models/OrderRegistry.v)        |
+| `RingCanceller`     | [Models/RingCanceller.v](Models/RingCanceller.v)        |
+| `RingSubmitter`     | [Models/RingSubmitter.v](Models/RingSubmitter.v)        |
+| `TradeDelegate`     | [Models/TradeDelegate.v](Models/TradeDelegate.v)        |
 
 Files in [Libs/](./Libs/) are libraries which define types and structures used in the formal model and proofs.
 
