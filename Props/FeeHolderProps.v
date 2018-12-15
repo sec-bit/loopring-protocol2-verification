@@ -37,7 +37,7 @@ End Aux.
 
 Section WithdrawBurnedReqAuth.
 
-  Theorem withdrawBurn_noauth:
+  Theorem withdrawBurned_noauth:
     forall sender wst,
       ~ FeeHolder.is_authorized wst sender ->
       forall token amount,
