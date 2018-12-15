@@ -58,9 +58,9 @@ Files in [Props/](./Props/) prove the following theorems for corresponding prope
 
 Both the formal model and the formal proofs are implemented in the interactive proof assistant [Coq](https://coq.inria.fr/). You can use Coq to automatically check the correctness of proofs.
 
-1. Install OPAM by following [official instructions](https://opam.ocaml.org/doc/Install.html).
+1. Install opam by following [official instructions](https://opam.ocaml.org/doc/Install.html).
 
-2. Install Coq and libraries via OPAM.
+2. Install Coq and other dependencies via opam.
 
     ```
     $ opam init
